@@ -1,0 +1,16 @@
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+tempCodeRunnerFile.py
+
+# Packaging
+**/__pycache__/
+**/*.egg-info/
+**/*.egg
+**/dist/
+**/build/
+
+# Environment variables
+.env
