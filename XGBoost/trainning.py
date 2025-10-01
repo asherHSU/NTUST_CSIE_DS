@@ -10,7 +10,7 @@ from sklearn.multiclass import OneVsRestClassifier
 trainDataFile = 'DataSet\\acct_transaction.csv'
 alertDataFile = 'DataSet\\acct_alert.csv'
 outputSourceFile = 'DataSet\\acct_predict.csv'
-outputPath = 'DataSet\\'
+outputPath = 'XGBoost\\'
 
 def load_data():
     """讀取 CSV 檔案並合併標籤"""
@@ -42,11 +42,11 @@ def preprocess_data(df):
     df['is_night_txn'] = ((df['txn_hour'] < 6) | (df['txn_hour'] > 22)).astype(int)
 
     # 只對低基數類別做獨熱編碼
-    categorical_features = ['from_acct_type', 'is_self_txn', 'currency_type', 'channel_type']
+    categorical_features = ['from_acct_type','to_acct_type', 'is_self_txn', 'txn_amt', 'currency_type', 'channel_type']
     df = pd.get_dummies(df, columns=categorical_features, drop_first=True)
 
     # 移除高基數與原始欄位
-    df = df.drop(['from_acct', 'to_acct', 'txn_date', 'txn_time', 'txn_datetime'], axis=1)
+    df = df.drop(['from_acct', 'to_acct', 'txn_time', 'txn_datetime'], axis=1)
     print("處理後資料維度:", df.shape)
     return df
 
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     print(xgboost.build_info())
 
     df = load_data() # 讀取資料
-    # print(df.head(60)) # 顯示前50筆資料
-    #print(df[df['alert_label'] == 1].head(10))#get first 10 data which alert_label is 1
+    print(df.head(50)) # 顯示前50筆資料
+    print(df[df['alert_label'] == 1].head(10))#get first 10 data which alert_label is 1
     df_processed = preprocess_data(df) # 資料前處理
     df_processed = create_features(df_processed) # 特徵工程
     X, y = split_features_labels(df_processed) # 定義特徵 X 和目標 y
@@ -92,8 +92,7 @@ if __name__ == "__main__":
     print(f"測試集中警示帳戶比例: {y_test.mean():.2%}")
     
     # 計算 scale_pos_weight 以處理類別不平衡
-    # 它的值是 (負類別數量 / 正類別數量)
-    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
+    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum() # (負類別數量 / 正類別數量)
     print(f"Scale Pos Weight: {scale_pos_weight:.2f}")
 
     # 初始化 XGBoost 分類器
@@ -104,7 +103,7 @@ if __name__ == "__main__":
         objective='binary:logistic',
         eval_metric='logloss',
         use_label_encoder=False,
-        scale_pos_weight=scale_pos_weight, # 處理不平衡資料的關鍵參數
+        scale_pos_weight=scale_pos_weight, # 處理不平衡資料的參數
         n_estimators=200,                 # 樹的數量
         max_depth=5,                      # 樹的最大深度
         learning_rate=0.1,                # 學習率
@@ -138,10 +137,3 @@ if __name__ == "__main__":
     # 3. ROC-AUC 分數
     auc = roc_auc_score(y_test, y_pred_proba)
     print(f"\nROC-AUC 分數: {auc:.4f}")
-
-    # read outputSourceFile's acct,mapping to df and feed them into model and add result to it
-    # output_df = pd.read_csv(outputSourceFile)
-    # output_df = output_df.merge(df[['to_acct', 'alert_label']], on='acct', how='left')
-    # output_df['alert_prediction'] = xgb_clf.predict(output_df)
-    # output_df.to_csv(outputPath + 'acct_predict_with_alert.csv', index=False)
-    # print(f"預測結果已儲存至 {outputPath + 'acct_predict_with_alert.csv'}")
