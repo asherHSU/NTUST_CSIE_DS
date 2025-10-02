@@ -35,7 +35,7 @@ def preprocess_data(df):
     base_date = pd.to_datetime("2020-01-01")
     df['txn_date'] = df['txn_date'].astype(int)
     df['txn_time'] = df['txn_time'].astype(str)
-    df['txn_datetime'] = df['txn_date'].apply(lambda x: base_date + pd.Timedelta(days=x)).astype(str) + ' ' + df['txn_time']
+    df['txn_datetime'] = pd.to_datetime(df['txn_date'], unit='D', origin=base_date).astype(str) + ' ' + df['txn_time']
     df['txn_datetime'] = pd.to_datetime(df['txn_datetime'])
     df['txn_hour'] = df['txn_datetime'].dt.hour
     df['txn_day_of_week'] = df['txn_datetime'].dt.dayofweek
@@ -56,13 +56,16 @@ if __name__ == "__main__":
 
     df = load_data() # 讀取資料
     print(df.head(50)) # 顯示前50筆資料
+    output_df = pd.read_csv(outputSourceFile)
+    
     train_sample = preprocess_data(df.drop(['alert_label'], axis=1))
     expected_features = train_sample.columns
     model = XGBClassifier(tree_method='gpu_hist', predictor='gpu_predictor', use_label_encoder=False)
     model.load_model(outputPath + 'xgb_model.json')# read model from json
     
-    output_df = pd.read_csv(outputSourceFile)
     for index, row in output_df.iterrows():
+        #if index == 20: break
+        
         temp_df = df[(df['to_acct'] == row['acct']) | (df['from_acct'] == row['acct'])].copy()
         
         if not temp_df.empty:
@@ -76,12 +79,14 @@ if __name__ == "__main__":
             temp_df_processed = temp_df_processed.reindex(columns=expected_features, fill_value=0)
 
             preds = model.predict(temp_df_processed)
-            temp_df.loc[:, 'alert_label'] = preds
+            temp_df['alert_label'] = preds
             #temp_df.to_csv(outputPath + f'temp_{row["acct"]}.csv', index=False)
             
             #if 30% of transactions are alert, mark the acct as alert
             alert_ratio = temp_df['alert_label'].mean()
-            output_df['alert_label'] = 1 if alert_ratio >= 0.3 else 0
+            
+            #mark output df's row alert column
+            output_df.loc[index, 'label'] = 1 if alert_ratio >= 0.3 else 0
             
     #save to csv
     output_df.to_csv(outputPath + 'output.csv', index=False)
