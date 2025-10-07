@@ -16,3 +16,4 @@ tempCodeRunnerFile.py
 .env
 
 DataSet/acct_transaction.csv
+XGBoost/*.csv

@@ -6,86 +6,70 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
 from xgboost import XGBClassifier
 from sklearn.multiclass import OneVsRestClassifier
+import os
 
-trainDataFile = 'DataSet\\acct_transaction.csv'
-alertDataFile = 'DataSet\\acct_alert.csv'
-outputSourceFile = 'DataSet\\acct_predict.csv'
+dir_path = "DataSet\\"
 outputPath = 'XGBoost\\'
 
-def load_data():
-    """讀取 CSV 檔案並合併標籤"""
-    try:
-        df = pd.read_csv(trainDataFile)
-        alert_df = pd.read_csv(alertDataFile)
-        print("主資料維度:", df.shape)
-        print("警示標籤維度:", alert_df.shape)
-        # 根據 acct 是否在警示名單中，標記 alert_label
-        alert_set = set(alert_df['acct'])
-        df['alert_label'] = df['to_acct'].apply(lambda x: 1 if x in alert_set else 0)
-        print("合併後資料維度:", df.shape)
-        print("欄位列表:", df.columns.tolist())
-    except FileNotFoundError:
-        print("錯誤：找不到指定的資料檔案。請確認檔案路徑和名稱是否正確。")
-        exit()
-    return df
+def TrainTestSplit(df, df_alert, df_test):
+    """
+    切分訓練集及測試集，並為訓練集的帳戶標上警示label (0為非警示、1為警示)
+    
+    備註:
+        1. 測試集為待預測帳戶清單，你需要預測它們
+        2. 此切分僅為範例，較標準的做法是基於訓練集再且分成train和validation，請有興趣的參賽者自行切分
+        3. 由於待預測帳戶清單僅為玉山戶，所以我們在此範例僅使用玉山帳戶做訓練
+    """  
+    X_train = df[(~df['acct'].isin(df_test['acct'])) & (df['is_esun']==1)].drop(columns=['is_esun']).copy()
+    y_train = X_train['acct'].isin(df_alert['acct']).astype(int)
+    X_test = df[df['acct'].isin(df_test['acct'])].drop(columns=['is_esun']).copy()
+    
+    print(f"(Finish) Train-Test-Split")
+    return X_train, X_test, y_train
 
-def preprocess_data(df):
-    """資料前處理"""
-    # 假設起始日期為 2020-01-01
-    base_date = pd.to_datetime("2020-01-01")
-    df['txn_date'] = df['txn_date'].astype(int)
-    df['txn_time'] = df['txn_time'].astype(str)
-    df['txn_datetime'] = df['txn_date'].apply(lambda x: base_date + pd.Timedelta(days=x)).astype(str) + ' ' + df['txn_time']
-    df['txn_datetime'] = pd.to_datetime(df['txn_datetime'])
-    df['txn_hour'] = df['txn_datetime'].dt.hour
-    df['txn_day_of_week'] = df['txn_datetime'].dt.dayofweek
-    df['is_night_txn'] = ((df['txn_hour'] < 6) | (df['txn_hour'] > 22)).astype(int)
+# def Modeling(X_train, y_train, X_test):
+#     """
+#     Decision Tree的範例程式，參賽者可以在這裡實作自己需要的方法
+#     """
+#     model = DecisionTreeClassifier(random_state=42)
+#     model.fit(X_train.drop(columns=['acct']), y_train)
+#     y_pred = model.predict(X_test.drop(columns=['acct']))   
+    
+#     print(f"(Finish) Modeling")
+#     return y_pred
 
-    # 只對低基數類別做獨熱編碼
-    categorical_features = ['from_acct_type','to_acct_type', 'is_self_txn', 'txn_amt', 'currency_type', 'channel_type']
-    df = pd.get_dummies(df, columns=categorical_features, drop_first=True)
-
-    # 移除高基數與原始欄位
-    df = df.drop(['from_acct', 'to_acct', 'txn_time', 'txn_datetime'], axis=1)
-    print("處理後資料維度:", df.shape)
-    return df
-
-def create_features(df):
-    """創造新特徵"""
-    # 範例1：資產與交易的比例
-    # 避免除以零的錯誤
-    #df['txn_amt_to_asset_ratio'] = df['total_txn_amt_L3M'] / (df['total_asset'] + 1)
-
-    # 範例2：交易頻率
-    #df['avg_txn_per_day_L3M'] = df['total_txn_count_L3M'] / 90
-
-    # 範例3：夜間交易比例
-    # 假設有 'night_txn_count_L3M' 欄位
-    #df['night_txn_ratio'] = df['night_txn_count_L3M'] / (df['total_txn_count_L3M'] + 1)
-
-    print("特徵工程完成！")
-    return df
-
-def split_features_labels(df, label_column='alert_label'):
-    """分割特徵和標籤"""
-    X = df.drop(columns=[label_column], axis=1)
-    y = df[label_column]
-    return X, y
-
+def OutputCSV(path, df_test, y_pred):
+    """
+    根據測試資料集及預測結果，產出預測結果之CSV，該CSV可直接上傳於TBrain    
+    """
+    df_pred = pd.DataFrame({
+        'acct': df_test['acct'],
+        'label': y_pred
+    })
+    
+    df_out = df_test[['acct']].merge(df_pred, on='acct', how='left')
+    df_out.to_csv(os.path.join(path, 'submission.csv'), index=False)
+    
+    print(f"(Finish) Output saved to {path}")
+    
 if __name__ == "__main__":
     print("XGBoost version:", xgboost.__version__)
     print(xgboost.build_info())
 
-    df = load_data() # 讀取資料
-    print(df.head(50)) # 顯示前50筆資料
-    print(df[df['alert_label'] == 1].head(10))#get first 10 data which alert_label is 1
-    df_processed = preprocess_data(df) # 資料前處理
-    df_processed = create_features(df_processed) # 特徵工程
-    X, y = split_features_labels(df_processed) # 定義特徵 X 和目標 y
-
+    df_processed = pd.read_csv('XGBoost\\preprocessed_data.csv')
+    df_alert = pd.read_csv(os.path.join(dir_path, 'acct_alert.csv'))
+    df_test = pd.read_csv(os.path.join(dir_path, 'acct_predict.csv'))
+    print(df_processed.head(50)) # 顯示前50筆資料
+    
     # 切分訓練集和測試集 (80% 訓練, 20% 測試)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    #X_train, X_test, y_train = TrainTestSplit(df_processed, df_alert, df_test)
+    
+    X = df_processed[(~df_processed['acct'].isin(df_test['acct'])) & (df_processed['is_esun']==1)]
+    X = X.drop(columns=['is_esun']).copy()
+    y = X['acct'].isin(df_alert['acct']).astype(int)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
 
+    print(f"X_train:\n{X_train.head()}")
     print(f"訓練集大小: {X_train.shape}")
     print(f"測試集大小: {X_test.shape}")
     print(f"訓練集中警示帳戶比例: {y_train.mean():.2%}")
@@ -96,16 +80,13 @@ if __name__ == "__main__":
     print(f"Scale Pos Weight: {scale_pos_weight:.2f}")
 
     # 初始化 XGBoost 分類器
-    # objective='binary:logistic': 用於二元分類
-    # eval_metric='logloss': 評估指標
-    # use_label_encoder=False: 避免未來版本中的警告
     xgb_clf = XGBClassifier(
         objective='binary:logistic',
         eval_metric='logloss',
         use_label_encoder=False,
         scale_pos_weight=scale_pos_weight, # 處理不平衡資料的參數
         n_estimators=200,                 # 樹的數量
-        max_depth=5,                      # 樹的最大深度
+        max_depth=6,                      # 樹的最大深度
         learning_rate=0.1,                # 學習率
         subsample=0.8,                    # 訓練每棵樹時使用的樣本比例
         colsample_bytree=0.8,             # 訓練每棵樹時使用的特徵比例
@@ -116,7 +97,7 @@ if __name__ == "__main__":
 
     # 訓練模型
     print("開始訓練 XGBoost 模型...")
-    xgb_clf.fit(X_train, y_train)
+    xgb_clf.fit(X_train.drop(columns=['acct']), y_train)
     print("模型訓練完成！")
     
     # save model
@@ -124,8 +105,8 @@ if __name__ == "__main__":
     print(f"模型已儲存至 {outputPath + 'xgb_model.json'}")
     
     # 在測試集上進行預測
-    y_pred = xgb_clf.predict(X_test)
-    y_pred_proba = xgb_clf.predict_proba(X_test)[:, 1] # 預測為警示帳戶的機率
+    y_pred = xgb_clf.predict(X_test.drop(columns=['acct']))
+    y_pred_proba = xgb_clf.predict_proba(X_test.drop(columns=['acct']))[:, 1] # 預測為警示帳戶的機率
 
     # 1. 混淆矩陣 (Confusion Matrix)
     cm = confusion_matrix(y_test, y_pred)
@@ -137,3 +118,8 @@ if __name__ == "__main__":
     # 3. ROC-AUC 分數
     auc = roc_auc_score(y_test, y_pred_proba)
     print(f"\nROC-AUC 分數: {auc:.4f}")
+    
+    df_test = df_processed[df_processed['acct'].isin(df_test['acct'])].drop(columns=['is_esun']).copy()
+    y_test_pred = xgb_clf.predict(df_test.drop(columns=['acct']))
+    OutputCSV(outputPath, df_test, y_test_pred)   
+    
