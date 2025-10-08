@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 
@@ -32,6 +33,20 @@ def PreProcessing(df_txn):
     """
     資料前處理
     """    
+    print("(Start) PreProcessing...")
+    # 將時間拆分並轉換為秒數
+    time_parts = df_txn['txn_time'].str.split(':')
+    hour = time_parts.str[0].astype(int)
+    minute = time_parts.str[1].astype(int)
+    second = time_parts.str[2].astype(int)
+    
+    # 將時間轉換為當日的總秒數
+    time_in_seconds = hour * 3600 + minute * 60 + second
+    
+    # 創建時間戳：(日期-1) * 86400秒 + 當日秒數
+    df_txn['timestamp'] = (df_txn['txn_date'] - 1) * 86400 + time_in_seconds
+    df_txn.drop(columns=['txn_date', 'txn_time'], inplace=True)
+
     # 1. 'total_send/recv_amt': total amount sent/received by each acct
     send = df_txn.groupby('from_acct')['txn_amt'].sum().rename('total_send_amt')
     recv = df_txn.groupby('to_acct')['txn_amt'].sum().rename('total_recv_amt')
@@ -40,12 +55,24 @@ def PreProcessing(df_txn):
     max_send = df_txn.groupby('from_acct')['txn_amt'].max().rename('max_send_amt')
     min_send = df_txn.groupby('from_acct')['txn_amt'].min().rename('min_send_amt')
     avg_send = df_txn.groupby('from_acct')['txn_amt'].mean().rename('avg_send_amt')
+    var_send = df_txn.groupby('from_acct')['txn_amt'].var().rename('var_send_amt')
+    std_send = df_txn.groupby('from_acct')['txn_amt'].std().rename('std_send_amt')
 
     max_recv = df_txn.groupby('to_acct')['txn_amt'].max().rename('max_recv_amt')
     min_recv = df_txn.groupby('to_acct')['txn_amt'].min().rename('min_recv_amt')
     avg_recv = df_txn.groupby('to_acct')['txn_amt'].mean().rename('avg_recv_amt')
+    var_recv = df_txn.groupby('to_acct')['txn_amt'].var().rename('var_recv_amt')
+    std_recv = df_txn.groupby('to_acct')['txn_amt'].std().rename('std_recv_amt')
+    
+    # high frequency send by timestamp
+    #collect acct timestamp
+    send_times = df_txn.groupby('from_acct')['timestamp'].apply(list)
+    recv_times = df_txn.groupby('to_acct')['timestamp'].apply(list)
+    #combine send and recv times list
+    all_times = pd.concat([send_times, recv_times], axis=0).sort_index()
+    print(all_times.head())
 
-    df_result = pd.concat([max_send, min_send, avg_send, max_recv, min_recv, avg_recv, send, recv], axis=1).fillna(0).reset_index()
+    df_result = pd.concat([max_send, min_send, avg_send, var_send, std_send, max_recv, min_recv, avg_recv, var_recv, std_recv, send, recv], axis=1).fillna(0).reset_index()
     df_result.rename(columns={'index': 'acct'}, inplace=True)
     
     # 2. 'is_esun': is esun account or not
