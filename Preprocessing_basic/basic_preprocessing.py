@@ -4,19 +4,10 @@ import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 
 def LoadCSV(dir_path):
-    """
-    讀取提供的3個資料集：交易資料、警示帳戶註記、待預測帳戶清單
-    Args:
-        dir_path (str): 資料夾，請把上述3個檔案放在同一個資料夾
-    
-    Returns:
-        df_txn: 交易資料 DataFrame
-        df_alert: 警示帳戶註記 DataFrame
-    """
     
     try:
-        df_txn = pd.read_csv(os.path.join(dir_path, 'acct_transaction.csv'))
-        df_alert = pd.read_csv(os.path.join(dir_path, 'acct_alert.csv'))
+        df_txn = pd.read_csv('D:\\讀書==\\NTUST\\大三上\\資料科學\\NTUST_CSIE_DS\\DataSet\\acct_transaction.csv')
+        df_alert = pd.read_csv('D:\\讀書==\\NTUST\\大三上\\資料科學\\NTUST_CSIE_DS\\DataSet\\acct_alert.csv')
         print("交易資料維度:", df_txn.shape)
         print("警示標籤維度:", df_alert.shape)
         
@@ -27,7 +18,6 @@ def LoadCSV(dir_path):
     
     print("(Finish) Load Dataset.")
     return df_txn, df_alert
-
 
 def PreProcessing(df_txn):
     """
@@ -84,30 +74,12 @@ def PreProcessing(df_txn):
         'ZAR': 1.8
     }
     
-    # 1. 總交易金額
-    send = df_txn.groupby('from_acct')['txn_amt'].sum().rename('total_send_amt')
-    recv = df_txn.groupby('to_acct')['txn_amt'].sum().rename('total_recv_amt')
-
-    # 2. max, min, avg txn_amt for each account
-    # 不確定需不需要改成換算過的幣值 by Eric
-    max_send = df_txn.groupby('from_acct')['txn_amt'].max().rename('max_send_amt')
-    min_send = df_txn.groupby('from_acct')['txn_amt'].min().rename('min_send_amt')
-    avg_send = df_txn.groupby('from_acct')['txn_amt'].mean().rename('avg_send_amt')
-    var_send = df_txn.groupby('from_acct')['txn_amt'].var().rename('var_send_amt')
-    std_send = df_txn.groupby('from_acct')['txn_amt'].std().rename('std_send_amt')
-
-    max_recv = df_txn.groupby('to_acct')['txn_amt'].max().rename('max_recv_amt')
-    min_recv = df_txn.groupby('to_acct')['txn_amt'].min().rename('min_recv_amt')
-    avg_recv = df_txn.groupby('to_acct')['txn_amt'].mean().rename('avg_recv_amt')
-    var_recv = df_txn.groupby('to_acct')['txn_amt'].var().rename('var_recv_amt')
-    std_recv = df_txn.groupby('to_acct')['txn_amt'].std().rename('std_recv_amt')
-    
-    # 用時間點紀錄交易次數
+    # 交易次數
     send_times = df_txn.groupby('from_acct')['timestamp'].apply(list)
     recv_times = df_txn.groupby('to_acct')['timestamp'].apply(list)
     all_times = pd.concat([send_times, recv_times]).groupby(level=0).apply(lambda x: sum(x.tolist(), []))
 
-    # 交易次數
+    # 交易次數 (Basic實作)
     txn_count = all_times.apply(lambda lst: len(lst)).rename('txn_count')
     
     # 每個帳號的timestamp給他寫出來
@@ -122,9 +94,6 @@ def PreProcessing(df_txn):
     print(all_times.head())
 
     df_result = pd.concat([
-        max_send, min_send, avg_send, var_send, std_send,
-        max_recv, min_recv, avg_recv, var_recv, std_recv,
-        send, recv,
         txn_count, first_txn_ts, last_txn_ts, std_txn_ts
     ], axis=1).fillna(0).reset_index()
     df_result.rename(columns={'index': 'acct'}, inplace=True)
@@ -164,5 +133,5 @@ if __name__ == "__main__":
     dir_path = "DataSet\\"
     df_txn, df_alert = LoadCSV(dir_path)
     df_X = PreProcessing(df_txn)
-    df_X.to_csv('XGBoost\\preprocessed_data.csv', index=False)
-    print("(Finish) Save preprocessed data to 'XGBoost\\preprocessed_data.csv'.")
+    df_X.to_csv('D:\\讀書==\\NTUST\\大三上\\資料科學\\NTUST_CSIE_DS\\XGBoost\\result.csv', index=False)
+    print("(Finish) Save preprocessed data to 'XGBoost\\result.csv'.")
