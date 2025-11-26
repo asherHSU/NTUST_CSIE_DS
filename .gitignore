@@ -18,3 +18,6 @@ tempCodeRunnerFile.py
 DataSet/acct_transaction.csv
 DataSet/PreProcessing_T2.csv
 XGBoost/*.csv
+
+PreProcessing_T1/test_features_v4.csv
+PreProcessing_T1/train_features_v4.csv
