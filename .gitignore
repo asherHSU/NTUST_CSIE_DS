@@ -15,10 +15,9 @@ tempCodeRunnerFile.py
 # Environment variables
 .env
 
-DataSet/acct_transaction.csv
-DataSet/PreProcessing_T2.csv
 XGBoost/*.csv
 
 PreProcessing_T1/test_features_v4.csv
 PreProcessing_T1/train_features_v4.csv
 Preprocessing_T3/preprocessed_T3.csv
+DataSet/**.csv
