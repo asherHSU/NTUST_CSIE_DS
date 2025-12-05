@@ -1,8 +1,11 @@
-#對輸入模型進行評分
+# 對輸入模型進行評分
 def evaluate_model(model, test_data):
     """
     評估分類模型於訓練與測試資料的表現。
     data: (X_train, X_test, y_train, y_test)
+
+    Returns:
+        tuple: (train_acc, train_roc_auc, test_acc, test_roc_auc)
     """
     from sklearn.metrics import (
         accuracy_score,
@@ -19,6 +22,8 @@ def evaluate_model(model, test_data):
 
     # 若模型支援 predict_proba，則計算 ROC AUC
     has_proba = hasattr(model, "predict_proba")
+    y_train_proba = None
+    y_test_proba = None
     if has_proba:
         y_train_proba = model.predict_proba(X_train)[:, 1]
         y_test_proba = model.predict_proba(X_test)[:, 1]
@@ -29,14 +34,18 @@ def evaluate_model(model, test_data):
         print(confusion_matrix(y_true, y_pred))
         print("\nClassification Report:")
         print(classification_report(y_true, y_pred))
-        print(f"Accuracy: {accuracy_score(y_true, y_pred):.4f}")
+        acc = accuracy_score(y_true, y_pred)
+        print(f"Accuracy: {acc:.4f}")
 
+        roc = None
         if y_proba is not None:
-            print(f"ROC AUC Score: {roc_auc_score(y_true, y_proba):.4f}")
+            roc = roc_auc_score(y_true, y_proba)
+            print(f"ROC AUC Score: {roc:.4f}")
         print("-" * 60)
+        return acc, roc
 
     # 訓練集
-    report(
+    train_acc, train_roc = report(
         "訓練資料集",
         y_train,
         y_train_pred,
@@ -44,10 +53,14 @@ def evaluate_model(model, test_data):
     )
 
     # 測試集
-    report(
+    test_acc, test_roc = report(
         "測試資料集",
         y_test,
         y_test_pred,
         y_test_proba if has_proba else None
     )
-    return
+
+    return train_acc, train_roc, test_acc, test_roc
+
+def evaluate_alert():
+    pass
