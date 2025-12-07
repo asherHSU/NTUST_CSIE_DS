@@ -30,10 +30,19 @@ def evaluate_model(model, test_data):
 
     def report(title, y_true, y_pred, y_proba=None):
         print(f"{title}:")
-        print("Confusion Matrix:")
-        print(confusion_matrix(y_true, y_pred))
-        print("\nClassification Report:")
-        print(classification_report(y_true, y_pred))
+        if y_proba is not None:
+            # 使用概率值進行分類
+            y_pred_proba = (y_proba >= 0.5).astype(int)
+            print("Confusion Matrix (using probabilities):")
+            print(confusion_matrix(y_true, y_pred_proba))
+            print("\nClassification Report (using probabilities):")
+            print(classification_report(y_true, y_pred_proba))
+        else:
+            print("Confusion Matrix:")
+            print(confusion_matrix(y_true, y_pred))
+            print("\nClassification Report:")
+            print(classification_report(y_true, y_pred))
+
         acc = accuracy_score(y_true, y_pred)
         print(f"Accuracy: {acc:.4f}")
 
