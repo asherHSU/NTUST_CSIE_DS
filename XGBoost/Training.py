@@ -87,7 +87,7 @@ def training_hyperParameter(random_state: list = [42], training_dataSet: tuple =
             param_distributions=param_grid,
             cv=3,
             scoring='average_precision',
-            n_jobs=-1,
+            n_jobs=1,
             verbose=3,
             random_state=state
         )

@@ -107,7 +107,6 @@ def prepare_data_cutting(
     else:
         X_train_out, y_train_out = X_train_scaled, y_train
 
-    print(f"抽樣後資料大小: {sampled_df.shape}, 正類比例: {y.mean():.2%}")
     print(f"訓練集大小: {X_train_out.shape}, 測試集大小: {X_test_scaled.shape}")
     print(f"訓練集正類比例: {y_train_out.mean():.2%}, 測試集正類比例: {y_test.mean():.2%}")
 
