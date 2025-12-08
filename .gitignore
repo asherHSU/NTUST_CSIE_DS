@@ -11,14 +11,20 @@ tempCodeRunnerFile.py
 **/*.egg
 **/dist/
 **/build/
+.vscode/**
 
 # Environment variables
 .env
 
-DataSet/acct_transaction.csv
-DataSet/PreProcessing_T2.csv
 XGBoost/*.csv
+<<<<<<< HEAD
 
 PreProcessing_T1/test_features_t1.csv
 PreProcessing_T1/train_features_t1.csv
 PreProcessing_T1/T1_features.csv
+=======
+DataSet/**.csv
+PreProcessing_T1/test_features_v4.csv
+PreProcessing_T1/train_features_v4.csv
+Preprocessing_T3/preprocessed_T3.csv
+>>>>>>> origin/main
