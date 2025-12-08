@@ -85,7 +85,7 @@ def prepare_data_cutting(
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # 當 pos_scale > 1.0 時，於訓練集使用 SMOTE 放大正類數量
+    # 當 pos_scale > 1.0 時，於訓練集使用 SMOTE 放大正類數量（僅增正類，負類不變）
     if pos_scale > 1.0:
         n_pos = int((y_train == 1).sum())
         n_neg = int((y_train == 0).sum())
@@ -93,13 +93,16 @@ def prepare_data_cutting(
             raise ValueError("訓練集沒有正類，無法執行 SMOTE。")
         # 目標正類數量
         n_pos_target = int(n_pos * pos_scale)
-        # 轉為 SMOTE 的 sampling_strategy = 目標正類數 / 負類數
-        sampling_strategy = n_pos_target / max(n_neg, 1)
+        
+        # 只提高正類到 n_pos_target，負類維持 n_neg（不增不減）
+        sampling_strategy = {0: n_neg, 1: n_pos_target}
 
-        # 安全界限：若 sampling_strategy 太大（> 10），可能不合理，做上限保護
-        sampling_strategy = min(sampling_strategy, 10.0)
+        # 若 k_neighbors 大於正類樣本數-1，需調小以避免錯誤
+        k_neighbors = max(1, min(5, n_pos - 1))
 
-        smote = SMOTE(sampling_strategy=sampling_strategy, random_state=random_state)
+        smote = SMOTE(sampling_strategy=sampling_strategy,
+                      random_state=random_state,
+                      k_neighbors=k_neighbors)
         X_train_out, y_train_out = smote.fit_resample(X_train_scaled, y_train)
     else:
         X_train_out, y_train_out = X_train_scaled, y_train

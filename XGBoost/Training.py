@@ -30,7 +30,7 @@ from Util import Evaluater, PrepareData
 
 # Global variables
 dir_path = "C:\\school\\SchoolProgram\\NTUST_CSIE_DS\\DataSet"
-dataSetNames = ['preprocessing_T1_2_3.csv']
+dataSetNames = ['preprocessing_T1_basic.csv', 'preprocessing_T1_2.csv', 'preprocessing_T1_2_3.csv']
 outputPath = ''
 random_state = 42
 training_random_state = [42]
@@ -43,7 +43,7 @@ def load_data(fileNames: list) -> list[pd.DataFrame]:
         print(f"Loaded {file}, shape: {df.shape}")
     return df_results
 
-def training(random_state: list = [42], training_dataSet: tuple = None) -> list[XGBClassifier]:
+def training_hyperParameter(random_state: list = [42], training_dataSet: tuple = None) -> list[XGBClassifier]:
     """
     訓練 XGBoost 模型，並根據輸入的隨機種子和訓練資料集進行多次訓練。
 
@@ -87,7 +87,7 @@ def training(random_state: list = [42], training_dataSet: tuple = None) -> list[
             param_distributions=param_grid,
             cv=3,
             scoring='average_precision',
-            n_jobs=1,
+            n_jobs=-1,
             verbose=3,
             random_state=state
         )
@@ -114,7 +114,55 @@ def training(random_state: list = [42], training_dataSet: tuple = None) -> list[
         trained_models.append(xgb_clf)
 
         # 儲存模型
-        model_filename = f"xgb_model_seed_{state}.json"
+        ts = datetime.now().strftime("%m%d_%H%M%S")
+        model_filename = f"xgb_model_{ts}.json"
+        xgb_clf.save_model(model_filename)
+        print(f"隨機種子: {state}，模型已儲存為 {model_filename}。")
+
+    print("所有模型訓練完成！")
+    return trained_models
+
+def training(random_state: list = [42], training_dataSet: tuple = None) -> list[XGBClassifier]:
+    """
+    訓練 XGBoost 模型，並根據輸入的隨機種子和訓練資料集進行多次訓練。
+
+    Args:
+        random_state (list): 隨機種子列表，用於多次訓練。
+        training_dataSet (tuple): 包含 (X_train, X_test, y_train, y_test) 的訓練資料集。
+
+    Returns:
+        list[XGBClassifier]: 訓練完成的 XGBoost 分類器列表。
+    """
+    if training_dataSet is None:
+        raise ValueError("training_dataSet 參數不能為 None，請提供 (X_train, X_test, y_train, y_test) 資料。")
+
+    X_train, X_test, y_train, y_test = training_dataSet
+    trained_models = []
+
+    for state in random_state:
+        xgb_clf = XGBClassifier(
+            objective='binary:logistic',
+            random_state=state,
+            tree_method='hist',
+            device='cpu',            
+            scale_pos_weight= sum(y_train == 0) / sum(y_train == 1),
+            eval_metric=['aucpr'],
+            n_estimators= 650,
+            max_depth= 7,
+            learning_rate= 0.22,
+            subsample= 0.95,
+            colsample_bytree= 0.85
+        )
+        xgb_clf.fit(
+            X_train, y_train,
+            eval_set=[(X_test, y_test)], verbose=False
+        )
+
+        trained_models.append(xgb_clf)
+
+        # 儲存模型
+        ts = datetime.now().strftime("%m%d_%H%M%S")
+        model_filename = f"xgb_model_{ts}.json"
         xgb_clf.save_model(model_filename)
         print(f"隨機種子: {state}，模型已儲存為 {model_filename}。")
 
@@ -128,51 +176,16 @@ def evaluate_ensemble(trained_models: list[XGBClassifier], test_data: tuple) -> 
     """
     X_train, X_test, y_train, y_test = test_data
 
-
     print("=== 個別模型評估（Evaluater）===")
     for i, model in enumerate(trained_models, start=1):
         print(f"模型 {i} 評估結果:")
         Evaluater.evaluate_model(model, test_data)
 
-    # 集成：平均預測機率
-    print("=== 集成結果（平均預測）===")
-    all_proba = [m.predict_proba(X_test)[:, 1] for m in trained_models]
-    avg_proba = np.mean(np.vstack(all_proba), axis=0)
-    avg_pred = (avg_proba >= 0.5).astype(int)
-
-    from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
-    acc_avg = accuracy_score(y_test, avg_pred)
-    auc_avg = roc_auc_score(y_test, avg_proba)
-    print(f"Ensemble Accuracy: {acc_avg:.4f} | Ensemble ROC AUC: {auc_avg:.4f}")
-    print("Confusion Matrix (Ensemble):")
-    print(confusion_matrix(y_test, avg_pred))
-    print("Classification Report (Ensemble):")
-    print(classification_report(y_test, avg_pred))
-
-
-def average_predictions_to_csv(df_origin: pd.DataFrame, trained_models: list[XGBClassifier], threshold: float) -> None:
-    df_test_acct = pd.read_csv(os.path.join(dir_path, 'acct_alert.csv'))
-    df_test = (df_origin[df_origin['acct'].isin(df_test_acct['acct'])]
-               .copy()
-               .select_dtypes(include=[np.number])
-               .dropna(axis=1))
-    scaler = StandardScaler()
-    X_test = scaler.fit_transform(df_test.drop(columns=['label']))
-
-    all_proba = [m.predict_proba(X_test)[:, 1] for m in trained_models]
-    avg_proba = np.mean(np.vstack(all_proba), axis=0)
-    avg_label = (avg_proba >= threshold).astype(int)
-
-    df_pred = pd.DataFrame({'acct': df_test_acct['acct'], 'avg_label': avg_label, 'avg_proba': avg_proba})
-    current_time = datetime.now().strftime("%m%d_%H%M")
-    output_file = f"xgboost_avg_{current_time}.csv"
-    df_pred.to_csv(os.path.join(outputPath, output_file), index=False)
-    print(f"(Finish) Averaged predictions saved to {os.path.join(outputPath, output_file)}")
-
-def individual_predictions_to_csv(
+def predictions_to_csv(
     df_origin: pd.DataFrame,
     trained_models: list[XGBClassifier],
-    seeds: list[int] | None = None
+    seeds: list[int] | None = None,
+    threshold: float = 0.5
 ) -> None:
     """
     針對每個模型分別輸出預測結果一份 CSV。
@@ -191,49 +204,59 @@ def individual_predictions_to_csv(
     scaler = StandardScaler()
     X_test = scaler.fit_transform(df_test.drop(columns=['label']))
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    ts = datetime.now().strftime("%m%d_%H%M%S")
     for idx, model in enumerate(trained_models):
-        seed = seeds[idx] if seeds and idx < len(seeds) else idx + 1
 
-        y_pred = model.predict(X_test)
-        # 嘗試機率輸出
-        proba = None
+        # 使用機率進行預測
         if hasattr(model, "predict_proba"):
             try:
                 proba = model.predict_proba(X_test)[:, 1]
+                y_pred = (proba >= threshold).astype(int)  # 使用指定的預測閾值
             except Exception:
                 proba = None
+                y_pred = model.predict(X_test)
+        else:
+            proba = None
+            y_pred = model.predict(X_test)
 
         df_out = pd.DataFrame({'acct': df_test_acct['acct'], 'label': y_pred})
         if proba is not None:
             df_out['proba'] = proba
 
-        fname = f"xgboost_seed_{seed}_{ts}.csv"
+        fname = f"xgboost_seed_{ts}.csv"
         df_out.to_csv(os.path.join(outputPath, fname), index=False)
         print(f"(Finish) Individual predictions saved: {os.path.join(outputPath, fname)}")
 
 if __name__ == "__main__":
     # 載入資料
     df = load_data(dataSetNames)
-
-    # 資料預處理
-    training_dataSet = PrepareData.prepare_data(df[0].copy(), random_state=random_state, target_pos_ratio=0.5, test_size=0.30)
-
-    # 訓練模型（多隨機種子）
-    trained_models = training(random_state=training_random_state, training_dataSet=training_dataSet)
     
-    #load trained models
-    # trained_models = []
-    # for state in training_random_state:
-    #     model_filename = f"xgb_model_seed_{state}.json"
-    #     xgb_clf = XGBClassifier()
-    #     xgb_clf.load_model("XGBoost/" + model_filename)
-    #     trained_models.append(xgb_clf)
-    #     print(f"Loaded model from {model_filename}")
+    for i, data in enumerate(df):
+        print(f"{'='*10}DataSet {i+1} shape: {data.shape}, Positive ratio: {(data['label'] == 1).mean():.2%}{'='*10}")
 
-    # 個別模型與平均指標評估
-    evaluate_ensemble(trained_models, training_dataSet)
+        # 資料預處理
+        training_dataSet = PrepareData.prepare_data_cutting(data.copy(), random_state=random_state, neg_ratio=0.01, pos_scale=3, test_size=0.30)
 
-    # 輸出平均結果
-    average_predictions_to_csv(df[0].copy(), trained_models, threshold=0.4)
-    individual_predictions_to_csv(df[0].copy(), trained_models, training_random_state)
+        # 訓練模型
+        trained_models = training_hyperParameter(random_state=training_random_state, training_dataSet=training_dataSet)
+        
+        #load trained models
+        # trained_models = []
+        # for state in training_random_state:
+        #     model_filename = f"xgb_model_seed_{state}.json"
+        #     xgb_clf = XGBClassifier()
+        #     xgb_clf.load_model("XGBoost/" + model_filename)
+        #     trained_models.append(xgb_clf)
+        #     print(f"Loaded model from {model_filename}")
+
+        # 個別模型與平均指標評估
+        evaluate_ensemble(trained_models, training_dataSet)
+
+        # 針對第一個模型繪製 PR 曲線並取得最佳閾值
+        try:
+            best_thr, best_f1, ap = Evaluater.plot_pr_and_best_threshold(trained_models[0], training_dataSet, title=f"DataSet {i+1}")
+        except Exception as e:
+            print(f"繪製 PR 曲線失敗: {e}")
+            best_thr = 0.5  # 預設閾值
+        # 輸出預測結果至 CSV
+        predictions_to_csv(data.copy(), trained_models, seeds=training_random_state, threshold=0.25)
