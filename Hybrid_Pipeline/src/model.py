@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 from src.AE import AE
 from src.CatBoost import catboost_model
@@ -28,7 +27,7 @@ class AE_CatBoost_Model:
         self.input_dim = None                   # 輸入特徵維度
         self.uncertain_samples = None          # 儲存 AE 篩選出的不確定樣本
 
-    def fit(self, X:pd.DataFrame, y:pd.DataFrame, tune_params=False, train_turn=10):
+    def fit(self, X, y, tune_params=False, train_turn=10):
         """
         訓練完整的混合模型
         
@@ -49,7 +48,7 @@ class AE_CatBoost_Model:
         3. 訓練 CatBoost 分類器
         """
         # 建立訓練參數
-        X_unlabeled = DataProcessor.split_diff_label(X, y, positive_label=False).values
+        X_unlabeled = X
         X_known_anomalies = DataProcessor.split_diff_label(X, y, positive_label=True).values
         X_unlabeled_scaled = DataProcessor.scaler(X_unlabeled)
 
@@ -133,4 +132,5 @@ class AE_CatBoost_Model:
         # 計算 MSE (重建誤差)
         mse = np.mean(np.power(X_scaled - reconstructions, 2), axis=1)
         return mse
+    
     

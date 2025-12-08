@@ -29,11 +29,11 @@ class DataProcessor:
     @staticmethod
     # === 去掉 label 並回傳 label ===
     # 輸入 pd 去掉 label 
-    # return pd label
+    # return pd label , pd on label (no change input data)
     def cut_label(data):
         temp = data.copy()
-        data.drop(columns=['label'])
-        return temp['label']
+        temp = temp.drop(columns=['label'])
+        return data['label'],temp
     
     @staticmethod
     # === 切分訓練與測試資料集 ===
@@ -53,6 +53,6 @@ class DataProcessor:
         - train_label: 訓練資料集標籤
         - test_label: 測試資料集標籤
         """ 
-        y = DataProcessor.cut_label(df_preprocessing)
-        train_data, test_data, train_label, test_label = train_test_split(df_preprocessing, y, test_size=0.3, random_state=rand_seed, stratify=y)
+        y,X = DataProcessor.cut_label(df_preprocessing)
+        train_data, test_data, train_label, test_label = train_test_split(X, y, test_size=0.3, random_state=rand_seed, stratify=y)
         return train_data, test_data, train_label, test_label
