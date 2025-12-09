@@ -50,8 +50,8 @@ def prepare_data_pure(
 
 def prepare_data_cutting(
     df: pd.DataFrame,
-    neg_ratio: float = 0.50,
-    pos_scale: float = 1.0,
+    neg_ratio: float = 0.10,
+    pos_scale: float = 5.0,
     random_state: int = 42,
     test_size: float = 0.30
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
