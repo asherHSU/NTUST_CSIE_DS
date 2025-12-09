@@ -12,7 +12,7 @@ class catboost_model:
     model = CatBoostClassifier(
     iterations=1000,
     scale_pos_weight=141,  # 推薦的起始點
-    eval_metric='AUC',     # 這種比例下，Accuracy 完全無效，請看 AUC
+    eval_metric='AUCPR',     # 這種比例下，Accuracy 完全無效，請看 AUC
     early_stopping_rounds=50
     )
 
@@ -49,7 +49,7 @@ class catboost_model:
             estimator=catboost_model.model,
             param_distributions=catboost_model.param_dist,
             n_iter = train_turn,  # 隨機嘗試 10 組參數
-            scoring = f05_scorer, #'precision'->可能會太嚴格(test)、f05_scorer、f1
+            scoring = 'f1', #'precision'->可能會太嚴格(test)、f05_scorer、f1
             cv=3,       # 3-Fold Cross Validation
             verbose=1,
             n_jobs=-1   # 使用所有 CPU 核心
