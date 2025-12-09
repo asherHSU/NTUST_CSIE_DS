@@ -13,7 +13,7 @@ class AE_CatBoost_Model:
     - CatBoost: 用於監督學習的分類
     """
     
-    def __init__(self):
+    def __init__(self,threshold=0.5):
         """
         初始化模型
         - ae_model: AutoEncoder 模型物件
@@ -21,11 +21,11 @@ class AE_CatBoost_Model:
         - cat_model: CatBoost 分類器
         - input_dim: 輸入特徵維度
         """
-        self.ae_model = None                    # AE 模型 (訓練後會被設定)
-        self.ae_encoder = None                  # AE 編碼器 (用於提取壓縮特徵)
+        self.ae_model = AE()                   # AE 模型 (訓練後會被設定) 
         self.cat_model = catboost_model.model  # CatBoost 分類器
         self.input_dim = None                   # 輸入特徵維度
         self.uncertain_samples = None          # 儲存 AE 篩選出的不確定樣本
+        self.threshold = threshold 
 
     def fit(self, X, y, tune_params=False, train_turn=10):
         """
@@ -60,12 +60,11 @@ class AE_CatBoost_Model:
         self.input_dim = X_unlabeled_scaled.shape[1]
         
         # 訓練 AE 並取得可靠正常樣本
-        X_reliable_negatives, X_uncertain = AE.train(X_unlabeled_scaled, X_unlabeled)
-        self.uncertain_samples = X_uncertain  # 儲存不確定樣本以備後續使用
+        X_reliable_negatives = self.ae_model.train(X_unlabeled_scaled, X_unlabeled)
         
         # 步驟 2: 建立混合特徵 (原始特徵 + 壓縮特徵)
         print("\n" + "=" * 50)
-        print("步驟 3: 建立混合資料集並訓練 CatBoost...")
+        print("步驟 2: 建立混合資料集並訓練 CatBoost...")
         print("=" * 50)
         
         # 切分訓練集與驗證集
@@ -86,7 +85,8 @@ class AE_CatBoost_Model:
         
         # 使用最終資料訓練 CatBoost
         self.cat_model.fit(X_train, y_train, eval_set=(X_test, y_test), verbose=0)
-        print(f"\nCatBoost 訓練完成")
+        print("\n" + "=" * 50)
+        print(f"CatBoost 訓練完成")
         print("=" * 50)
 
     def predict(self, X):
@@ -99,7 +99,15 @@ class AE_CatBoost_Model:
         回傳：
         - 預測標籤 (0: 正常, 1: 異常)
         """
-        return self.cat_model.predict(X)
+         # 1. 先取得預測機率 (Shape: [n_samples, 2])
+        # 注意：我們只需要 "異常 (Class 1)" 的機率
+        probs = self.cat_model.predict_proba(X)[:, 1]
+        
+        # 2. 根據設定的閾值進行切分
+        # 大於等於閾值回傳 1，否則回傳 0
+        predictions = (probs >= self.threshold).astype(int)
+        
+        return predictions
 
     def predict_proba(self, X):
         """
@@ -113,24 +121,12 @@ class AE_CatBoost_Model:
         """
         return self.cat_model.predict_proba(X)
     
-    def get_ae_reconstruction_error(self, X_scaled):
+    def set_threshold(self, new_threshold):
         """
-        計算樣本的 AutoEncoder 重建誤差 (用於異常偵測)
-        
-        參數：
-        - X_scaled: 標準化的輸入特徵
-        
-        回傳：
-        - mse: 各樣本的重建誤差 (MSE)
+        ★ 新增功能：動態調整閾值
+        讓您在不重新訓練的情況下改變靈敏度
         """
-        if self.ae_model is None:
-            raise ValueError("模型尚未訓練，請先呼叫 fit() 方法")
-        
-        # 計算重建結果
-        reconstructions = self.ae_model.predict(X_scaled, verbose=0)
-        
-        # 計算 MSE (重建誤差)
-        mse = np.mean(np.power(X_scaled - reconstructions, 2), axis=1)
-        return mse
+        print(f"模型判定閾值已從 {self.threshold} 修改為 {new_threshold}")
+        self.threshold = new_threshold
     
     

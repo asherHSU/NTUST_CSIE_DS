@@ -5,8 +5,11 @@ import numpy as np
 
 
 class AE:
-    @staticmethod
-    def build_autoencoder(input_dim):
+
+    def __init__(self):
+        self.model = None
+
+    def build_autoencoder(self,input_dim):
         """建立簡單的 AE 模型"""
         input_layer = Input(shape=(input_dim,))
     
@@ -18,18 +21,17 @@ class AE:
         decoded = Dense(16, activation='relu')(encoded)
         output_layer = Dense(input_dim, activation='sigmoid')(decoded) # 若資料正規化到 0-1 用 sigmoid
     
-        autoencoder = Model(inputs=input_layer, outputs=output_layer)
-        autoencoder.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
-        return autoencoder
+        self.model = Model(inputs=input_layer, outputs=output_layer)
+        self.model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
     
-    @staticmethod
     # X_unlabeled_scaled    標準化無標記綜合資料(含特徵)
     # X_unlabeled           無標記綜合資料(含特徵)
-    def train(X_unlabeled_scaled,X_unlabeled):
+    def train(self,X_unlabeled_scaled, X_unlabeled):
         # 建立並訓練 AE
         # 注意：這裡使用全部未標記資料訓練，模型會傾向學習"大眾(正常)"的模式
         input_dim = X_unlabeled_scaled.shape[1]
-        ae_model = AE.build_autoencoder(input_dim)
+        self.build_autoencoder(input_dim)
+        ae_model = self.model
         ae_model.fit(
             X_unlabeled_scaled, X_unlabeled_scaled,
             epochs=20, 
@@ -37,7 +39,8 @@ class AE:
             shuffle=True, 
             verbose=0
         )
-
+        
+        self.model = ae_model
         # 計算重建誤差 (Reconstruction Error / MSE)
         reconstructions = ae_model.predict(X_unlabeled_scaled)
         mse = np.mean(np.power(X_unlabeled_scaled - reconstructions, 2), axis=1)
@@ -58,4 +61,19 @@ class AE:
             X_reliable_negatives = X_reliable_negatives.reset_index(drop=True)
             X_uncertain = X_uncertain.reset_index(drop=True)
             
-        return X_reliable_negatives,X_uncertain
+        return X_reliable_negatives
+    
+    def get_uncertain(self, X, X_scaled):
+        """取得 AE 篩選出的不確定樣本"""
+        ae_model = self.model
+        reconstructions = ae_model.predict(X_scaled)
+        mse = np.mean(np.power(X_scaled - reconstructions, 2), axis=1)
+
+        # 設定閾值：選取誤差最小的前 80% 作為「可靠的正常樣本 (Reliable Negatives)」
+        # 剩下的 20% 被視為模糊地帶，暫時不參與訓練，避免誤導模型
+        threshold = np.percentile(mse, 80) 
+        mask_reliable = mse < threshold
+    
+        X_uncertain = X[~mask_reliable] # 第一階段被剔除的高誤差群體
+
+        return X_uncertain
