@@ -4,6 +4,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
+from pathlib import Path
+
 
 def prepare_data_pure(
     df: pd.DataFrame,

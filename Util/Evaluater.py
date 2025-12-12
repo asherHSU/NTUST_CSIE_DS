@@ -1,5 +1,5 @@
 from typing import Tuple
-
+from pathlib import Path
 import numpy as np
 
 # 對輸入模型進行評分
@@ -85,6 +85,7 @@ def plot_pr_and_best_threshold(model, test_data, title) -> Tuple[float, float, f
     """
     import matplotlib.pyplot as plt
     from sklearn.metrics import precision_recall_curve, average_precision_score
+    from datetime import datetime
 
     X_train, X_test, y_train, y_test = test_data
 
@@ -126,7 +127,11 @@ def plot_pr_and_best_threshold(model, test_data, title) -> Tuple[float, float, f
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    file_name = f'PR_curve_{title.replace(" ", "_").lower()}.png'  # Generate file name
+    timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
+    save_dir = Path(__file__).resolve().parent / "Result" / "PR_Curve"
+    save_dir = Path(__file__).resolve().parent.parent / "XGBoost" / "Result" / "PR_Curve"  # Update save directory
+    save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+    file_name = save_dir / f'PR_curve_{timestamp}.png'  # Generate file name with timestamp
     plt.savefig(file_name)  # Save the graph as a file
     plt.close()  # Close the plot to avoid displaying it
 

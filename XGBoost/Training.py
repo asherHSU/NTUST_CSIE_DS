@@ -79,6 +79,9 @@ def training_hyperParameter(random_state: list = [42], training_dataSet: tuple =
             scale_pos_weight= sum(y_train == 0) / sum(y_train == 1),
             device='gpu'
         )
+        
+        X_train, X_val, y_train, y_val = X_train, X_test, y_train, y_test
+        #X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.3, random_state=state, stratify=y_train)
 
         print(f"開始訓練 XGBoost 模型，隨機種子: {state}")
         # 使用 GridSearchCV 搜索最佳參數
@@ -86,12 +89,12 @@ def training_hyperParameter(random_state: list = [42], training_dataSet: tuple =
             estimator=xgb_clf,
             param_distributions=param_grid,
             cv=3,
-            scoring='average_precision',
+            scoring='f1',
             n_jobs=1,
             verbose=3,
             random_state=state
         )
-        grid_search.fit(X_train, y_train)
+        grid_search.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
 
         # 使用最佳參數初始化分類器
         best_params, best_score = grid_search.best_params_, grid_search.best_score_
@@ -108,14 +111,16 @@ def training_hyperParameter(random_state: list = [42], training_dataSet: tuple =
         )
         xgb_clf.fit(
             X_train, y_train,
-            eval_set=[(X_test, y_test)], verbose=False
+            eval_set=[(X_val, y_val)], verbose=False
         )
 
         trained_models.append(xgb_clf)
 
         # 儲存模型
-        ts = datetime.now().strftime("%m%d_%H%M%S")
-        model_filename = f"xgb_model_{ts}.json"
+        timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
+        save_dir = Path(__file__).resolve().parent / "Result" / "Model"
+        save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+        model_filename = save_dir / f"xgb_model_{timestamp}.json"  # Generate file name with timestamp
         xgb_clf.save_model(model_filename)
         print(f"隨機種子: {state}，模型已儲存為 {model_filename}。")
 
@@ -181,7 +186,7 @@ def evaluate_ensemble(trained_models: list[XGBClassifier], test_data: tuple) -> 
         print(f"模型 {i} 評估結果:")
         Evaluater.evaluate_model(model, test_data)
 
-def predictions_to_csv(
+def predictions_result(
     df_origin: pd.DataFrame,
     trained_models: list[XGBClassifier],
     seeds: list[int] | None = None,
@@ -223,9 +228,36 @@ def predictions_to_csv(
         if proba is not None:
             df_out['proba'] = proba
 
-        fname = f"xgboost_seed_{ts}.csv"
-        df_out.to_csv(os.path.join(outputPath, fname), index=False)
-        print(f"(Finish) Individual predictions saved: {os.path.join(outputPath, fname)}")
+        timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
+        save_dir = Path(__file__).resolve().parent / "Result" / "CSV"
+        save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+        file_name = save_dir / f'predictions_{timestamp}.csv'  # Generate file name with timestamp
+        df_out.to_csv(file_name, index=False)
+        print(f"(Finish) Individual predictions saved: {file_name}")
+        
+def plot_feature_importance(model: XGBClassifier, title: str = "Feature Importance",
+                            importance_type: str = "gain", max_num: int = 20,
+                            save_dir: str | None = None) -> str:
+    """
+    繪製並儲存 XGBoost 特徵重要性圖。
+    importance_type: 'weight' | 'gain' | 'cover' | 'total_gain' | 'total_cover'
+    """
+    fig, ax = plt.subplots(figsize=(8, 6))
+    xgboost.plot_importance(
+        model, ax=ax, importance_type=importance_type, max_num_features=max_num, show_values=False
+    )
+    ax.set_title(title)
+    plt.tight_layout()
+
+    ts = datetime.now().strftime("%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
+    save_dir = Path(__file__).resolve().parent / "Result" / "Feature_Importance"
+    save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
+    file_name = save_dir / f'feature_importance_{importance_type}_{timestamp}.png'  # Generate file name with timestamp
+    plt.savefig(file_name, dpi=150)
+    plt.close(fig)
+    print(f"(Finish) Feature importance saved: {file_name}")
+    return file_name
 
 if __name__ == "__main__":
     # 載入資料
@@ -235,7 +267,7 @@ if __name__ == "__main__":
         print(f"{'='*10}DataSet {i+1} shape: {data.shape}, Positive ratio: {(data['label'] == 1).mean():.2%}{'='*10}")
 
         # 資料預處理
-        training_dataSet = PrepareData.prepare_data_cutting(data.copy(), random_state=random_state, neg_ratio=0.01, pos_scale=3, test_size=0.30)
+        training_dataSet = PrepareData.prepare_data_cutting(data.copy(), random_state=random_state, neg_ratio=0.015, pos_scale=5, test_size=0.20)
 
         # 訓練模型
         trained_models = training_hyperParameter(random_state=training_random_state, training_dataSet=training_dataSet)
@@ -259,4 +291,12 @@ if __name__ == "__main__":
             print(f"繪製 PR 曲線失敗: {e}")
             best_thr = 0.5  # 預設閾值
         # 輸出預測結果至 CSV
-        predictions_to_csv(data.copy(), trained_models, seeds=training_random_state, threshold=0.25)
+        predictions_result(data.copy(), trained_models, seeds=training_random_state, threshold=0.25)
+        
+        plot_feature_importance(
+            trained_models[0],
+            title=f"Feature Importance",
+            importance_type="gain",
+            max_num=20,
+            save_dir=str(Path(__file__).resolve().parent)
+        )
