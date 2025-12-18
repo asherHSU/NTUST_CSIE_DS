@@ -1,279 +1,199 @@
-import os
-import random
 import sys
+from pathlib import Path
 from datetime import datetime
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xgboost
-from imblearn.over_sampling import SMOTE
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
-from sklearn.model_selection import RandomizedSearchCV, train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder, StandardScaler
 from xgboost import XGBClassifier
-from pathlib import Path
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler  # 放在檔頭 imports（若尚未匯入）
+from Util.PrepareData import DataPreparer
+from Util.Evaluater import ModelEvaluator
+
+IS_SAVE_RESULT = True
 
 print("XGBoost version:", xgboost.__version__)
 print(xgboost.build_info())
 
 BASE_DIR = Path(__file__).resolve().parent
-
 PROJECT_ROOT = BASE_DIR.parent
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-# 從 Util 套件匯入
-from Util import Evaluater, PrepareData
-#=============================================================================
+class XGBoostTrainer:
+    def __init__(self, random_state: int):
+        self.random_state = random_state
 
-# Global variables
-dir_path = "C:\\school\\SchoolProgram\\NTUST_CSIE_DS\\DataSet"
-dataSetNames = ['preprocessing_T1_2_3.csv']
-outputPath = ''
-random_state = 42
-training_random_state = [42]
-
-def load_data(fileNames: list) -> list[pd.DataFrame]:
-    df_results = []
-    for file in fileNames:
-        df = pd.read_csv(os.path.join(dir_path, file))
-        df_results.append(df)
-        print(f"Loaded {file}, shape: {df.shape}")
-    return df_results
-
-def training_hyperParameter(random_state: list = [42], training_dataSet: tuple = None) -> list[XGBClassifier]:
-    """
-    訓練 XGBoost 模型，並根據輸入的隨機種子和訓練資料集進行多次訓練。
-
-    Args:
-        random_state (list): 隨機種子列表，用於多次訓練。
-        training_dataSet (tuple): 包含 (X_train, X_test, y_train, y_test) 的訓練資料集。
-
-    Returns:
-        list[XGBClassifier]: 訓練完成的 XGBoost 分類器列表。
-    """
-    if training_dataSet is None:
-        raise ValueError("training_dataSet 參數不能為 None，請提供 (X_train, X_test, y_train, y_test) 資料。")
-
-    X_train, X_test, y_train, y_test = training_dataSet
-    trained_models = []
-
-    for state in random_state:
-        # 定義參數網格
-        param_grid = {
-            'n_estimators': [550, 600, 650],
-            'max_depth': [6, 7, 8],
-            'learning_rate': [0.2, 0.22, 0.25],
-            'subsample': [0.95, 1.0],
-            'colsample_bytree': [0.82,0.85, 0.87]
-        }
-
-        # 初始化 XGBoost 分類器
-        xgb_clf = XGBClassifier(
-            objective='binary:logistic',
-            random_state=state,
-            tree_method='hist',
-            eval_metric=['aucpr'],
-            scale_pos_weight= sum(y_train == 0) / sum(y_train == 1),
-            device='gpu'
+    def train_with_search(self, dataset, param_grid):
+        X_train, _, y_train, _ = dataset
+        
+        #split validation set from training set
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train, test_size=0.3, stratify=y_train, random_state=self.random_state
         )
         
-        #X_train, X_val, y_train, y_val = X_train, X_test, y_train, y_test
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.3, random_state=state, stratify=y_train)
+        base_model = XGBClassifier(
+            objective="binary:logistic",
+            tree_method="hist",
+            eval_metric="aucpr",
+            device="gpu",
+            random_state=self.random_state,
+            scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum()
+        )
 
-        print(f"開始訓練 XGBoost 模型，隨機種子: {state}")
-        # 使用 GridSearchCV 搜索最佳參數
-        grid_search = RandomizedSearchCV(
-            estimator=xgb_clf,
+        search = RandomizedSearchCV(
+            base_model,
             param_distributions=param_grid,
+            scoring="f1",
             cv=3,
-            scoring='f1',
             n_jobs=1,
-            verbose=3,
-            random_state=state
-        )
-        grid_search.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
-
-        # 使用最佳參數初始化分類器
-        best_params, best_score = grid_search.best_params_, grid_search.best_score_
-        print(f"隨機種子: {state}，最佳參數: {best_params}，最佳分數: {best_score:.4f}")
-
-        xgb_clf = XGBClassifier(
-            **best_params,
-            objective='binary:logistic',
-            random_state=state,
-            tree_method='hist',
-            device='cpu',            
-            scale_pos_weight= sum(y_train == 0) / sum(y_train == 1),
-            eval_metric=['aucpr']
-        )
-        xgb_clf.fit(
-            X_train, y_train,
-            eval_set=[(X_val, y_val)], verbose=False
+            verbose=2,
+            random_state=self.random_state
         )
 
-        trained_models.append(xgb_clf)
+        search.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+        print(f"Best params: {search.best_params_}, Best score: {search.best_score_:.4f}")
+        print("finish hyperparameter search\n")
+        return search.best_estimator_
+    
+    def train(self, dataset, params: dict):
+        X_train, _, y_train, _ = dataset
+        
+        #split validation set from training set
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train, y_train, test_size=0.3, stratify=y_train, random_state=self.random_state
+        )
 
-        # 儲存模型
-        timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
+        model = XGBClassifier(
+            **params,
+            objective="binary:logistic",
+            tree_method="hist",
+            eval_metric="aucpr",
+            device="gpu",
+            random_state=self.random_state,
+            scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum()
+        )
+
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+        print("finish training\n")
+        return model
+
+    @staticmethod
+    def save_model(model):
         save_dir = Path(__file__).resolve().parent / "Result" / "Model"
-        save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
-        model_filename = save_dir / f"xgb_model_{timestamp}.json"  # Generate file name with timestamp
-        xgb_clf.save_model(model_filename)
-        print(f"隨機種子: {state}，模型已儲存為 {model_filename}。")
-
-    print("所有模型訓練完成！")
-    return trained_models
-
-def training(random_state: list = [42], training_dataSet: tuple = None) -> list[XGBClassifier]:
-    """
-    訓練 XGBoost 模型，並根據輸入的隨機種子和訓練資料集進行多次訓練。
-
-    Args:
-        random_state (list): 隨機種子列表，用於多次訓練。
-        training_dataSet (tuple): 包含 (X_train, X_test, y_train, y_test) 的訓練資料集。
-
-    Returns:
-        list[XGBClassifier]: 訓練完成的 XGBoost 分類器列表。
-    """
-    if training_dataSet is None:
-        raise ValueError("training_dataSet 參數不能為 None，請提供 (X_train, X_test, y_train, y_test) 資料。")
-
-    X_train, X_test, y_train, y_test = training_dataSet
-    trained_models = []
-
-    for state in random_state:
-        xgb_clf = XGBClassifier(
-            objective='binary:logistic',
-            random_state=state,
-            tree_method='hist',
-            device='cpu',            
-            scale_pos_weight= sum(y_train == 0) / sum(y_train == 1),
-            eval_metric=['aucpr'],
-            n_estimators= 650,
-            max_depth= 7,
-            learning_rate= 0.22,
-            subsample= 0.95,
-            colsample_bytree= 0.85
-        )
-        xgb_clf.fit(
-            X_train, y_train,
-            eval_set=[(X_test, y_test)], verbose=False
-        )
-
-        trained_models.append(xgb_clf)
-
-        # 儲存模型
-        ts = datetime.now().strftime("%m%d_%H%M%S")
-        model_filename = f"xgb_model_{ts}.json"
-        xgb_clf.save_model(model_filename)
-        print(f"隨機種子: {state}，模型已儲存為 {model_filename}。")
-
-    print("所有模型訓練完成！")
-    return trained_models
-
-def evaluate_ensemble(trained_models: list[XGBClassifier], test_data: tuple) -> None:
-    """
-    使用 Evaluater.evaluate_model 評每個模型並計算平均，
-    另計算平均預測機率的集成表現。
-    """
-    X_train, X_test, y_train, y_test = test_data
-
-    print("=== 個別模型評估（Evaluater）===")
-    for i, model in enumerate(trained_models, start=1):
-        Evaluater.evaluate_model(model, test_data)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        path = save_dir / f"xgb_model_{datetime.now():%m%d_%H%M%S}.json"
+        model.save_model(path)
+        print(f"model saved: {path}")
 
 def predictions_result(
     df_origin: pd.DataFrame,
-    trained_models: list[XGBClassifier],
-    seeds: list[int] | None = None,
-    threshold: float = 0.5
-) -> None:
+    model: XGBClassifier,
+    data_dir: str,
+    threshold: float = 0.5,
+    alert_file: str = "acct_alert.csv"
+) -> str:
     """
-    針對每個模型分別輸出預測結果一份 CSV。
-    若提供 seeds，檔名會包含對應的隨機種子；否則用序號標識。
-
-    檔案命名：xgboost_seed_{seed}_{YYYYMMDD_HHMM}.csv
+    針對 acct_alert.csv 指定的帳戶輸出預測結果 CSV。
     欄位：acct, label, proba（若模型不支援 predict_proba，則省略 proba）
     """
-    df_test_acct = pd.read_csv(os.path.join(dir_path, 'acct_alert.csv'))
+    # 讀取測試帳戶清單
+    alert_path = Path(data_dir) / alert_file
+    df_test_acct = pd.read_csv(alert_path)
+
+    # 過濾原始資料，僅保留指定帳戶與數值欄位；移除空欄
     df_test = (
         df_origin[df_origin['acct'].isin(df_test_acct['acct'])]
         .copy()
         .select_dtypes(include=[np.number])
-        .dropna(axis=1)
+        .dropna(axis=1, how='all')
     )
+
+    # 建立特徵矩陣（若有 label 欄位則移除）
+    feature_cols = [c for c in df_test.columns if c != 'label']
     scaler = StandardScaler()
-    X_test = scaler.fit_transform(df_test.drop(columns=['label']))
+    X_test = scaler.fit_transform(df_test[feature_cols])
 
-    ts = datetime.now().strftime("%m%d_%H%M%S")
-    for idx, model in enumerate(trained_models):
-
-        # 使用機率進行預測
+    # 進行預測
+    proba = None
+    try:
         if hasattr(model, "predict_proba"):
-            try:
-                proba = model.predict_proba(X_test)[:, 1]
-                y_pred = (proba >= threshold).astype(int)  # 使用指定的預測閾值
-            except Exception:
-                proba = None
-                y_pred = model.predict(X_test)
+            proba = model.predict_proba(X_test)[:, 1]
+            y_pred = (proba >= threshold).astype(int)
         else:
-            proba = None
             y_pred = model.predict(X_test)
+    except Exception:
+        # 發生例外時退回直接預測
+        y_pred = model.predict(X_test)
 
-        df_out = pd.DataFrame({'acct': df_test_acct['acct'], 'label': y_pred})
-        if proba is not None:
-            df_out['proba'] = proba
+    # 組裝輸出
+    out = pd.DataFrame({
+        'acct': df_test_acct['acct'],
+        'label': y_pred
+    })
+    if proba is not None:
+        out['proba'] = proba
 
-        timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
-        save_dir = Path(__file__).resolve().parent / "Result" / "CSV"
-        save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
-        file_name = save_dir / f'predictions_{timestamp}.csv'  # Generate file name with timestamp
-        df_out.to_csv(file_name, index=False)
-        print(f"(Finish) Individual predictions saved: {file_name}")
+    # 儲存檔案
+    save_dir = Path(__file__).resolve().parent / "Result" / "CSV"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    file_path = save_dir / f"predictions_{datetime.now():%m%d_%H%M%S}.csv"
+    out.to_csv(file_path, index=False)
+    print(f"Finish Individual predictions\n")
+    return str(file_path)
 
 if __name__ == "__main__":
-    # 載入資料
-    df = load_data(dataSetNames)
-    
-    for i, data in enumerate(df):
-        print(f"{'='*10}DataSet {i+1} shape: {data.shape}, Positive ratio: {(data['label'] == 1).mean():.2%}{'='*10}")
-        data.drop(columns=['acct_type_x', 'acct_type_y'], inplace=True, errors='ignore')
+    random_state = 42
+    data_dir = "C:/school/SchoolProgram/NTUST_CSIE_DS/DataSet"
+    dataset_names = [
+    "preprocessing_T1_2_3.csv",
+    "preprocessing_T1_2.csv",
+    "preprocessing_T1_basic.csv"
+    ]
 
-        # 資料預處理
-        training_dataSet = PrepareData.prepare_data_cutting(data.copy(), random_state=random_state, neg_ratio=0.015, pos_scale=5, test_size=0.20)
+    param_grid = {
+    "n_estimators": [550, 600, 650],
+    "max_depth": [6, 7, 8],
+    "learning_rate": [0.2, 0.22, 0.25],
+    "subsample": [0.95, 1.0],
+    "colsample_bytree": [0.82, 0.85, 0.87]
+    }
 
-        # 訓練模型
-        trained_models = training_hyperParameter(random_state=training_random_state, training_dataSet=training_dataSet)
+    preparer = DataPreparer(random_state)
+    evaluator = ModelEvaluator()
+    trainer = XGBoostTrainer(random_state)
+
+    for file_name in dataset_names:
+        print(f"===== start training {file_name} =====")
+        df = pd.read_csv(Path(data_dir) / file_name)
+        df.drop(columns=['acct_type_x', 'acct_type_y'], inplace=True, errors='ignore')
+        print(f"Loaded {file_name}, shape: {df.shape}, Positive ratio: {(df['label'] == 1).mean():.2%}\n")
         
-        #load trained models
-        # trained_models = []
-        # for state in training_random_state:
-        #     model_filename = f"xgb_model_seed_{state}.json"
-        #     xgb_clf = XGBClassifier()
-        #     xgb_clf.load_model("XGBoost/" + model_filename)
-        #     trained_models.append(xgb_clf)
-        #     print(f"Loaded model from {model_filename}")
-
-        # 個別模型與平均指標評估
-        evaluate_ensemble(trained_models, training_dataSet)
-
-        # 針對第一個模型繪製 PR 曲線並取得最佳閾值
-        try:
-            best_thr, best_f1, ap = Evaluater.plot_pr_and_best_threshold(trained_models[0], training_dataSet, title=f"DataSet {i+1}")
-        except Exception as e:
-            print(f"繪製 PR 曲線失敗: {e}")
-            best_thr = 0.5  # 預設閾值
+        # dataset = preparer.prepare_data_pure(df,test_size=0.20)
+        dataset = preparer.prepare_cutting(df,neg_ratio=0.015, pos_scale=5, test_size=0.20)
+        # dataset = preparer.prepare_data_smote(df,target_pos_ratio=0.33, test_size=0.20)
+        
+        model = trainer.train_with_search(dataset, param_grid)
+        # model = trainer.train(dataset, params={
+        #     "n_estimators": 650,
+        #     "max_depth": 7,
+        #     "learning_rate": 0.25,
+        #     "subsample": 0.95,
+        #     "colsample_bytree": 0.85
+        # })
+        
+        if IS_SAVE_RESULT:
+            trainer.save_model(model)
+            metrics = evaluator.evaluate_model(model, dataset)
+            ap, thresholds = evaluator.plot_pr_threshold(model, dataset, title=file_name)
+            evaluator.plot_feature_importance(
+                model,
+                title="Feature Importance",
+                importance_type="gain",
+                max_num=20
+            )
             
-        # 輸出預測結果至 CSV
-        predictions_result(data.copy(), trained_models, seeds=training_random_state, threshold=0.25)
+            predictions_result(df_origin=df,model=model,data_dir=data_dir,threshold=0.2,alert_file="acct_alert.csv")
         
-        Evaluater.plot_feature_importance(
-            trained_models[0],
-            title="Feature Importance",
-            importance_type="gain",
-            max_num=20,
-            save_dir=str(Path(__file__).resolve().parent)
-        )
+        print(f"===== finish training {file_name} =====")
