@@ -2,6 +2,7 @@ from catboost import CatBoostClassifier
 import numpy as np
 from sklearn.model_selection import train_test_split,RandomizedSearchCV
 from sklearn.metrics import make_scorer, fbeta_score
+from typing import Tuple
 
 class catboost_model:
     def __init__(self):
@@ -12,7 +13,7 @@ class catboost_model:
     model = CatBoostClassifier(
     iterations=1000,
     scale_pos_weight=141,  # 推薦的起始點
-    eval_metric='AUCPR',     # 這種比例下，Accuracy 完全無效，請看 AUC
+    eval_metric='PRAUC',     # 這種比例下，Accuracy 完全無效，請看 AUC
     early_stopping_rounds=50
     )
 
@@ -20,7 +21,7 @@ class catboost_model:
     param_dist = {
         # 原本是 [50, 100, 141, 200...], 現在改成更保守的範圍
         # 甚至包含 1 (不加權)，看是否光靠特徵就能分出來
-        'scale_pos_weight': [1,2,3,4,5, 10, 20, 30, 42, 60, 100, 200, 300], 
+        'scale_pos_weight': [1,2,3,4,5], 
 
         'depth': [4, 5, 6, 7, 8, 9, 10, 11, 12], 
         'l2_leaf_reg': [5, 10, 15, 20, 30, 40 , 50], # 加強正則化，減少誤判
@@ -29,7 +30,7 @@ class catboost_model:
     }
 
     @staticmethod
-    def catBoost_cut(X_reliable_negatives,X_known_anomalies):
+    def catBoost_cut(X_reliable_negatives, X_known_anomalies) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         # 建立&切分訓練集
         # 建構訓練集：可靠正常 (Label 0) + 已知異常 (Label 1)
         X_train_final = np.vstack([X_reliable_negatives, X_known_anomalies])

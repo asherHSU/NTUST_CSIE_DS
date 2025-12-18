@@ -49,7 +49,8 @@ class AE_CatBoost_Model:
         """
         # 建立訓練參數
         X_unlabeled = X
-        X_known_anomalies = DataProcessor.split_diff_label(X, y, positive_label=True).values
+        # X_known_anomalies = DataProcessor.split_diff_label(X, y, positive_label=True).values
+        X_known_anomalies = DataProcessor.split_diff_label(X, y, positive_label=True)
         X_unlabeled_scaled = DataProcessor.scaler(X_unlabeled)
 
         # 步驟 1: 訓練 AutoEncoder 並篩選可靠正常樣本
