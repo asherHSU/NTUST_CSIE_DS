@@ -30,7 +30,7 @@ from Util import Evaluater, PrepareData
 
 # Global variables
 dir_path = "C:\\school\\SchoolProgram\\NTUST_CSIE_DS\\DataSet"
-dataSetNames = ['preprocessing_T1_basic.csv', 'preprocessing_T1_2.csv', 'preprocessing_T1_2_3.csv']
+dataSetNames = ['preprocessing_T1_2_3.csv']
 outputPath = ''
 random_state = 42
 training_random_state = [42]
@@ -80,8 +80,8 @@ def training_hyperParameter(random_state: list = [42], training_dataSet: tuple =
             device='gpu'
         )
         
-        X_train, X_val, y_train, y_val = X_train, X_test, y_train, y_test
-        #X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.3, random_state=state, stratify=y_train)
+        #X_train, X_val, y_train, y_val = X_train, X_test, y_train, y_test
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.3, random_state=state, stratify=y_train)
 
         print(f"開始訓練 XGBoost 模型，隨機種子: {state}")
         # 使用 GridSearchCV 搜索最佳參數
@@ -183,7 +183,6 @@ def evaluate_ensemble(trained_models: list[XGBClassifier], test_data: tuple) -> 
 
     print("=== 個別模型評估（Evaluater）===")
     for i, model in enumerate(trained_models, start=1):
-        print(f"模型 {i} 評估結果:")
         Evaluater.evaluate_model(model, test_data)
 
 def predictions_result(
@@ -234,30 +233,6 @@ def predictions_result(
         file_name = save_dir / f'predictions_{timestamp}.csv'  # Generate file name with timestamp
         df_out.to_csv(file_name, index=False)
         print(f"(Finish) Individual predictions saved: {file_name}")
-        
-def plot_feature_importance(model: XGBClassifier, title: str = "Feature Importance",
-                            importance_type: str = "gain", max_num: int = 20,
-                            save_dir: str | None = None) -> str:
-    """
-    繪製並儲存 XGBoost 特徵重要性圖。
-    importance_type: 'weight' | 'gain' | 'cover' | 'total_gain' | 'total_cover'
-    """
-    fig, ax = plt.subplots(figsize=(8, 6))
-    xgboost.plot_importance(
-        model, ax=ax, importance_type=importance_type, max_num_features=max_num, show_values=False
-    )
-    ax.set_title(title)
-    plt.tight_layout()
-
-    ts = datetime.now().strftime("%m%d_%H%M%S")
-    timestamp = datetime.now().strftime("%m%d_%H%M%S")  # Generate timestamp
-    save_dir = Path(__file__).resolve().parent / "Result" / "Feature_Importance"
-    save_dir.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
-    file_name = save_dir / f'feature_importance_{importance_type}_{timestamp}.png'  # Generate file name with timestamp
-    plt.savefig(file_name, dpi=150)
-    plt.close(fig)
-    print(f"(Finish) Feature importance saved: {file_name}")
-    return file_name
 
 if __name__ == "__main__":
     # 載入資料
@@ -265,6 +240,7 @@ if __name__ == "__main__":
     
     for i, data in enumerate(df):
         print(f"{'='*10}DataSet {i+1} shape: {data.shape}, Positive ratio: {(data['label'] == 1).mean():.2%}{'='*10}")
+        data.drop(columns=['acct_type_x', 'acct_type_y'], inplace=True, errors='ignore')
 
         # 資料預處理
         training_dataSet = PrepareData.prepare_data_cutting(data.copy(), random_state=random_state, neg_ratio=0.015, pos_scale=5, test_size=0.20)
@@ -290,12 +266,13 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"繪製 PR 曲線失敗: {e}")
             best_thr = 0.5  # 預設閾值
+            
         # 輸出預測結果至 CSV
         predictions_result(data.copy(), trained_models, seeds=training_random_state, threshold=0.25)
         
-        plot_feature_importance(
+        Evaluater.plot_feature_importance(
             trained_models[0],
-            title=f"Feature Importance",
+            title="Feature Importance",
             importance_type="gain",
             max_num=20,
             save_dir=str(Path(__file__).resolve().parent)
