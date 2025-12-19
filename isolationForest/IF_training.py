@@ -65,7 +65,7 @@ def training_IF(random_state_list=[42], training_dataSet=None) -> list[Isolation
         iso = IsolationForest(
             n_estimators=650,          # Kept high for robustness
             max_features=0.8,          # <--- CHANGED: Increased from 0.1 for better feature coverage
-            contamination=0.01,        # <--- CHANGED: Increased from 0.005 to test a wider threshold
+            contamination=0.1,        # <--- CHANGED: Increased from 0.005 to test a wider threshold
             max_samples='auto',        # Kept optimal default
             random_state=seed,
             n_jobs=-1
@@ -121,15 +121,15 @@ def predictions_to_csv(
         if hasattr(model, "predict_proba"):
             try:
                 scores = model.decision_function(X_test)
-                threshold = np.percentile(scores, 1)  # or contamination * 100
+                threshold = np.percentile(scores, 10)  # or contamination * 100
                 y_pred = (scores < threshold).astype(int)
             except Exception:
                 scores = model.decision_function(X_test)
-                threshold = np.percentile(scores, 1)  # or contamination * 100
+                threshold = np.percentile(scores, 10)  # or contamination * 100
                 y_pred = (scores < threshold).astype(int)
         else:
             scores = model.decision_function(X_test)
-            threshold = np.percentile(scores, 1)  # or contamination * 100
+            threshold = np.percentile(scores, 10)  # or contamination * 100
             y_pred = (scores < threshold).astype(int)
 
         df_out = pd.DataFrame({'acct': df_test_acct['acct'], 'label': y_pred})
@@ -154,8 +154,8 @@ if __name__ == "__main__":
         training_dataSet = PrepareData.prepare_data_cutting(
             data.copy(),
             random_state=random_state,
-            neg_ratio=0.01, 
-            pos_scale=3, 
+            neg_ratio=0.009, 
+            pos_scale=2, 
             test_size=0.30
         )
 
@@ -172,3 +172,8 @@ if __name__ == "__main__":
             seeds=training_random_state,
             threshold=0.0
         )
+        try:
+            best_thr, best_f1, ap = Score_Based_Evaluater.plot_pr_curve_if(trained_models[0], training_dataSet, title=f"DataSet {i+1}")
+        except Exception as e:
+            print(f"Failed to generate PR curve: {e}")
+            best_thr = 0.5  # 預設閾值
