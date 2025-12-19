@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in map(str, sys.path):
     sys.path.insert(0, str(PROJECT_ROOT))
 # Custom project imports (unchanged)
 
-from Util import Evaluater, PrepareData
+from Util import Score_Based_Evaluater, PrepareData
 
 #===========================================================
 # Global Settings
@@ -92,7 +92,7 @@ def evaluate_ensemble(trained_models: list[IsolationForest], test_data: tuple) -
     print("===  (Model Evaluater) ===")
     for i, model in enumerate(trained_models, start=1):
         print(f"Model {i} reuslts:")
-        Evaluater.evaluate_model(model, test_data)
+        Score_Based_Evaluater.evaluate_model(model, test_data)
 
 #===========================================================
 # Output Predictions to CSV
