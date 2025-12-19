@@ -5,11 +5,11 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 
 class ModelEvaluator:
-    def __init__(self):
-        self.result_dir = Path(__file__).resolve().parent.parent / "XGBoost" / "Result"/ "Logs"
+    def __init__(self, result_dir: str = ""):
+        self.result_dir = Path(result_dir).resolve().parent.parent / result_dir
         self.result_dir.mkdir(parents=True, exist_ok=True)
         # 單次執行共用一個 log 檔
-        self.log_path = self.result_dir / f"evaluater_log_{datetime.now():%m%d_%H%M%S}.txt"
+        self.log_path = self.result_dir / "Logs" / f"evaluater_log_{datetime.now():%m%d_%H%M%S}.txt"
 
     def _log(self, msg: str = "") -> None:
         with self.log_path.open("a", encoding="utf-8") as f:
@@ -96,7 +96,7 @@ class ModelEvaluator:
 
         # 日誌輸出（僅測試集，與提供範例一致）
         self._log(f"PR 曲線 AP: {ap:.4f}")
-        self._log(f"最佳閾值: {best_threshold:.4f} | F1: {best_f1:.4f} | P: {best_p:.4f} | R: {best_r:.4f}")
+        self._log(f"最佳閾值: {best_threshold:.4f} | F1: {best_f1:.4f} | P: {best_p:.4f} | R: {best_r:.4f}\n")
 
         # 圖檔輸出
         plt.figure(figsize=(6, 5))
@@ -109,30 +109,42 @@ class ModelEvaluator:
         plt.legend()
         plt.tight_layout()
 
-        save_dir = Path(__file__).resolve().parent.parent / "XGBoost" / "Result" / "PR_Curve"
+        save_dir = self.result_dir / "PR_Curve"
         save_dir.mkdir(parents=True, exist_ok=True)
         file = save_dir / f'PR_curve_{datetime.now():%m%d_%H%M%S}.png'
         plt.savefig(file)
         plt.close()
         print(f"finish plot_pr_threshold\n")
         return ap, best_threshold
-
+    
     def plot_feature_importance(self, model, title: str = "Feature Importance",
                                 importance_type: str = "gain", max_num: int = 20) -> str:
-        import xgboost
+        if not hasattr(model, "feature_importances_") and not hasattr(model, "get_booster"):
+            raise ValueError("The model does not support feature importance plotting.")
 
         fig, ax = plt.subplots(figsize=(8, 6))
-        xgboost.plot_importance(
-            model,
-            ax=ax,
-            importance_type=importance_type,
-            max_num_features=max_num,
-            show_values=False
-        )
-        ax.set_title(title)
+
+        if hasattr(model, "get_booster"):  # For XGBoost models
+            import xgboost
+            xgboost.plot_importance(
+                model,
+                ax=ax,
+                importance_type=importance_type,
+                max_num_features=max_num,
+                show_values=False
+            )
+        elif hasattr(model, "feature_importances_"):  # For models with feature_importances_ attribute
+            importances = model.feature_importances_
+            indices = np.argsort(importances)[::-1][:max_num]
+            ax.barh(range(len(indices)), importances[indices], align="center")
+            ax.set_yticks(range(len(indices)))
+            ax.set_yticklabels([f"Feature {i}" for i in indices])
+            ax.invert_yaxis()
+            ax.set_title(title)
+
         plt.tight_layout()
 
-        save_dir = Path(__file__).resolve().parent.parent / "XGBoost" / "Result" / "Feature_Importance"
+        save_dir = self.result_dir / "Feature_Importance"
         save_dir.mkdir(parents=True, exist_ok=True)
         file = save_dir / f"feature_importance_{importance_type}_{datetime.now():%m%d_%H%M%S}.png"
         plt.savefig(file, dpi=500)

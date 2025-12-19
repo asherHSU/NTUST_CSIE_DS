@@ -147,9 +147,9 @@ if __name__ == "__main__":
     random_state = 42
     data_dir = "C:/school/SchoolProgram/NTUST_CSIE_DS/DataSet"
     dataset_names = [
-    "preprocessing_T1_2_3.csv",
-    "preprocessing_T1_2.csv",
-    "preprocessing_T1_basic.csv"
+    "preprocessingV2_T1_2_3.csv",
+    # "preprocessingV2_T1_2.csv",
+    # "preprocessingV2_T1_basic.csv"
     ]
 
     param_grid = {
@@ -161,13 +161,14 @@ if __name__ == "__main__":
     }
 
     preparer = DataPreparer(random_state)
-    evaluator = ModelEvaluator()
+    evaluator = ModelEvaluator(result_dir="XGBoost/Result/")
     trainer = XGBoostTrainer(random_state)
 
     for file_name in dataset_names:
         print(f"===== start training {file_name} =====")
         df = pd.read_csv(Path(data_dir) / file_name)
-        df.drop(columns=['acct_type_x', 'acct_type_y'], inplace=True, errors='ignore')
+        # df = df[df['acct_type_x'] == 1]
+        # df.drop(columns=['acct_type_x', 'acct_type_y'], inplace=True, errors='ignore')
         print(f"Loaded {file_name}, shape: {df.shape}, Positive ratio: {(df['label'] == 1).mean():.2%}\n")
         
         # dataset = preparer.prepare_data_pure(df,test_size=0.20)
