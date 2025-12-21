@@ -19,7 +19,7 @@ xgboost = [
 ]
 
 [tool.setuptools]
-packages = ["XGBoost"]
+packages = ["XGBoost", "PUlearning"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
