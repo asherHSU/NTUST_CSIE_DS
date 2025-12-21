@@ -119,5 +119,39 @@ def plot_pr_curve_if(model, test_data, title="PR Curve"):
 
     return precision, recall, thresholds, ap
 
+def plot_feature_importance(self, model, title: str = "Feature Importance",
+                                importance_type: str = "gain", max_num: int = 20) -> str:
+        if not hasattr(model, "feature_importances_") and not hasattr(model, "get_booster"):
+            raise ValueError("The model does not support feature importance plotting.")
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        if hasattr(model, "get_booster"):  # For XGBoost models
+            import xgboost
+            xgboost.plot_importance(
+                model,
+                ax=ax,
+                importance_type=importance_type,
+                max_num_features=max_num,
+                show_values=False
+            )
+        elif hasattr(model, "feature_importances_"):  # For models with feature_importances_ attribute
+            importances = model.feature_importances_
+            indices = np.argsort(importances)[::-1][:max_num]
+            ax.barh(range(len(indices)), importances[indices], align="center")
+            ax.set_yticks(range(len(indices)))
+            ax.set_yticklabels([f"Feature {i}" for i in indices])
+            ax.invert_yaxis()
+            ax.set_title(title)
+
+        plt.tight_layout()
+
+        save_dir = self.result_dir / "Feature_Importance"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        plt.close(fig)
+
+        print(f"finish plot_feature_importance\n")
+        return
+
 def evaluate_alert():
     pass
