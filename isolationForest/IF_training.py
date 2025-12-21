@@ -186,3 +186,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to generate PR curve: {e}")
             best_thr = 0.5  # 預設閾值
+
+        Score_Based_Evaluater.plot_feature_importance(
+                trained_models,
+                title="Feature Importance",
+                importance_type="gain",
+                max_num=20
+            )
