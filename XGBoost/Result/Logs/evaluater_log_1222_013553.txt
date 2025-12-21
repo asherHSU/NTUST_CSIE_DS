@@ -1,0 +1,75 @@
+訓練資料集:
+Confusion Matrix (using probabilities):
+[[3956   37]
+ [  23 3992]]
+
+Classification Report (using probabilities):
+              precision    recall  f1-score   support
+
+           0       0.99      0.99      0.99      3993
+           1       0.99      0.99      0.99      4015
+
+    accuracy                           0.99      8008
+   macro avg       0.99      0.99      0.99      8008
+weighted avg       0.99      0.99      0.99      8008
+
+Accuracy: 0.9925
+ROC AUC Score: 0.9992
+------------------------------------------------------------
+測試資料集:
+Confusion Matrix (using probabilities):
+[[958  40]
+ [ 18 183]]
+
+Classification Report (using probabilities):
+              precision    recall  f1-score   support
+
+           0       0.98      0.96      0.97       998
+           1       0.82      0.91      0.86       201
+
+    accuracy                           0.95      1199
+   macro avg       0.90      0.94      0.92      1199
+weighted avg       0.95      0.95      0.95      1199
+
+Accuracy: 0.9516
+ROC AUC Score: 0.9840
+------------------------------------------------------------
+PR 曲線 AP: 0.9312
+最佳閾值: 0.7856 | F1: 0.8814 | P: 0.8585 | R: 0.9055
+
+訓練資料集:
+Confusion Matrix (using probabilities):
+[[3956   37]
+ [  23 3992]]
+
+Classification Report (using probabilities):
+              precision    recall  f1-score   support
+
+           0       0.99      0.99      0.99      3993
+           1       0.99      0.99      0.99      4015
+
+    accuracy                           0.99      8008
+   macro avg       0.99      0.99      0.99      8008
+weighted avg       0.99      0.99      0.99      8008
+
+Accuracy: 0.9925
+ROC AUC Score: 0.9992
+------------------------------------------------------------
+測試資料集:
+Confusion Matrix (using probabilities):
+[[  0   0]
+ [736 268]]
+
+Classification Report (using probabilities):
+              precision    recall  f1-score   support
+
+           0       0.00      0.00      0.00         0
+           1       1.00      0.27      0.42      1004
+
+    accuracy                           0.27      1004
+   macro avg       0.50      0.13      0.21      1004
+weighted avg       1.00      0.27      0.42      1004
+
+Accuracy: 0.2669
+ROC AUC Score: nan
+------------------------------------------------------------

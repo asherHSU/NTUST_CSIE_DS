@@ -72,7 +72,7 @@ class XGBoostTrainer:
             eval_metric="aucpr",
             device="gpu",
             random_state=self.random_state,
-            scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum()
+            scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum() * 2
         )
 
         model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
@@ -175,14 +175,14 @@ if __name__ == "__main__":
         dataset = preparer.prepare_cutting(df,neg_ratio=0.015, pos_scale=5, test_size=0.20)
         # dataset = preparer.prepare_data_smote(df,target_pos_ratio=0.33, test_size=0.20)
         
-        model = trainer.train_with_search(dataset, param_grid)
-        # model = trainer.train(dataset, params={
-        #     "n_estimators": 650,
-        #     "max_depth": 7,
-        #     "learning_rate": 0.25,
-        #     "subsample": 0.95,
-        #     "colsample_bytree": 0.85
-        # })
+        #model = trainer.train_with_search(dataset, param_grid)
+        model = trainer.train(dataset, params={
+            "n_estimators": 650,
+            "max_depth": 7,
+            "learning_rate": 0.25,
+            "subsample": 0.95,
+            "colsample_bytree": 0.85
+        })
         
         if IS_SAVE_RESULT:
             trainer.save_model(model)
@@ -195,6 +195,26 @@ if __name__ == "__main__":
                 max_num=20
             )
             
+            # 讀取測試帳戶清單
+            # alert_path = Path(data_dir) / "acct_alert.csv"
+            # df_test_acct = pd.read_csv(alert_path)
+
+            # 過濾原始資料，僅保留指定帳戶與數值欄位；移除空欄
+            # df_test = (
+            #     df[df['acct'].isin(df_test_acct['acct'])]
+            #     .copy()
+            #     .select_dtypes(include=[np.number])
+            #     .dropna(axis=1, how='all')
+            # )
+
+            # 建立特徵矩陣（若有 label 欄位則移除）
+            # scaler = StandardScaler()
+            # Y_train = df_test.drop(columns=["label"], errors='ignore')
+            # Y_train = scaler.fit_transform(Y_train)
+            # Y_test = df_test["label"].copy()
+            
+            # copy_dataSet = (dataset[0], Y_train, dataset[2], Y_test)
+            # evaluator.evaluate_model(model, copy_dataSet)
             predictions_result(df_origin=df,model=model,data_dir=data_dir,threshold=0.2,alert_file="acct_alert.csv")
         
         print(f"===== finish training {file_name} =====")
