@@ -27,7 +27,7 @@ if str(PROJECT_ROOT) not in map(str, sys.path):
     sys.path.insert(0, str(PROJECT_ROOT))
 
 dir_path = "D:\\讀書==\\NTUST\\大三上\\資料科學\\NTUST_CSIE_DS\\DataSet"
-dataSetNames = ['preprocessing_T1_basic.csv', 'preprocessing_T1_2.csv', 'preprocessing_T1_2_3.csv']
+dataSetNames = ['preprocessingV2_T1_basic.csv', 'preprocessingV2_T1_2.csv', 'preprocessingV2_T1_2_3.csv']
 outputPath = ''
 random_state = 42
 training_random_state = [42]
@@ -63,8 +63,8 @@ def training_IF(random_state_list=[42], training_dataSet=None) -> list[Isolation
 
     for seed in random_state_list:
         iso = IsolationForest(
-            n_estimators=650,          # Kept high for robustness
-            max_features=0.8,          # <--- CHANGED: Increased from 0.1 for better feature coverage
+            n_estimators=1200,          # Kept high for robustness
+            max_features=0.75,          # <--- CHANGED: Increased from 0.1 for better feature coverage
             contamination=0.1,        # <--- CHANGED: Increased from 0.005 to test a wider threshold
             max_samples='auto',        # Kept optimal default
             random_state=seed,
@@ -154,9 +154,18 @@ if __name__ == "__main__":
         training_dataSet = PrepareData.prepare_data_cutting(
             data.copy(),
             random_state=random_state,
-            neg_ratio=0.009, 
-            pos_scale=2, 
-            test_size=0.30
+            neg_ratio=0.015, 
+            pos_scale=5, 
+            test_size=0.20
+        )
+
+        X_train_full, X_test_final, y_train_full, y_test_final = training_dataSet
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train_full, y_train_full,
+            test_size=0.3,
+            random_state=42,
+            stratify = y_train_full
         )
 
         trained_models = training_IF(
