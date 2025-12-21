@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in map(str, sys.path):
     sys.path.insert(0, str(PROJECT_ROOT))
 # Custom project imports (unchanged)
 
-from Util import Evaluater, PrepareData
+from Util import Score_Based_Evaluater, PrepareData
 
 #===========================================================
 # Global Settings
@@ -27,7 +27,7 @@ if str(PROJECT_ROOT) not in map(str, sys.path):
     sys.path.insert(0, str(PROJECT_ROOT))
 
 dir_path = "D:\\讀書==\\NTUST\\大三上\\資料科學\\NTUST_CSIE_DS\\DataSet"
-dataSetNames = ['preprocessing_T1_basic.csv', 'preprocessing_T1_2.csv', 'preprocessing_T1_2_3.csv']
+dataSetNames = ['preprocessingV2_T1_basic.csv', 'preprocessingV2_T1_2.csv', 'preprocessingV2_T1_2_3.csv']
 outputPath = ''
 random_state = 42
 training_random_state = [42]
@@ -63,9 +63,9 @@ def training_IF(random_state_list=[42], training_dataSet=None) -> list[Isolation
 
     for seed in random_state_list:
         iso = IsolationForest(
-            n_estimators=650,          # Kept high for robustness
-            max_features=0.8,          # <--- CHANGED: Increased from 0.1 for better feature coverage
-            contamination=0.01,        # <--- CHANGED: Increased from 0.005 to test a wider threshold
+            n_estimators=1200,          # Kept high for robustness
+            max_features=0.75,          # <--- CHANGED: Increased from 0.1 for better feature coverage
+            contamination=0.1,        # <--- CHANGED: Increased from 0.005 to test a wider threshold
             max_samples='auto',        # Kept optimal default
             random_state=seed,
             n_jobs=-1
@@ -92,7 +92,7 @@ def evaluate_ensemble(trained_models: list[IsolationForest], test_data: tuple) -
     print("===  (Model Evaluater) ===")
     for i, model in enumerate(trained_models, start=1):
         print(f"Model {i} reuslts:")
-        Evaluater.evaluate_model(model, test_data)
+        Score_Based_Evaluater.evaluate_model(model, test_data)
 
 #===========================================================
 # Output Predictions to CSV
@@ -120,20 +120,21 @@ def predictions_to_csv(
     for i, model in enumerate(trained_models):
         if hasattr(model, "predict_proba"):
             try:
-                proba = model.predict_proba(X_test)[:, 1]
-                y_pred = (proba >= threshold).astype(int)  # 使用指定的預測閾值
+                scores = model.decision_function(X_test)
+                threshold = np.percentile(scores, 10)  # or contamination * 100
+                y_pred = (scores < threshold).astype(int)
             except Exception:
-                proba = None
-                y_pred = model.predict(X_test)
+                scores = model.decision_function(X_test)
+                threshold = np.percentile(scores, 10)  # or contamination * 100
+                y_pred = (scores < threshold).astype(int)
         else:
-            proba = None
-            y_pred = model.predict(X_test)
+            scores = model.decision_function(X_test)
+            threshold = np.percentile(scores, 10)  # or contamination * 100
+            y_pred = (scores < threshold).astype(int)
 
         df_out = pd.DataFrame({'acct': df_test_acct['acct'], 'label': y_pred})
-        if proba is not None:
-            df_out['proba'] = proba
 
-        fname = f"xgboost_seed_{ts}.csv"
+        fname = f"isolationForest_seed_{ts}.csv"
         df_out.to_csv(os.path.join(outputPath, fname), index=False)
         print(f"(Finish) Individual predictions saved: {os.path.join(outputPath, fname)}")
 
@@ -153,9 +154,18 @@ if __name__ == "__main__":
         training_dataSet = PrepareData.prepare_data_cutting(
             data.copy(),
             random_state=random_state,
-            neg_ratio=0.01, 
-            pos_scale=3, 
-            test_size=0.30
+            neg_ratio=0.015, 
+            pos_scale=5, 
+            test_size=0.20
+        )
+
+        X_train_full, X_test_final, y_train_full, y_test_final = training_dataSet
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train_full, y_train_full,
+            test_size=0.3,
+            random_state=42,
+            stratify = y_train_full
         )
 
         trained_models = training_IF(
@@ -171,3 +181,8 @@ if __name__ == "__main__":
             seeds=training_random_state,
             threshold=0.0
         )
+        try:
+            best_thr, best_f1, ap = Score_Based_Evaluater.plot_pr_curve_if(trained_models[0], training_dataSet, title=f"DataSet {i+1}")
+        except Exception as e:
+            print(f"Failed to generate PR curve: {e}")
+            best_thr = 0.5  # 預設閾值
