@@ -1,184 +1,106 @@
-from typing import Tuple
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
+from typing import Tuple
 
-def prepare_data_pure(
-    df: pd.DataFrame,
-    random_state: int = 42,
-    test_size: float = 0.30
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    將原始資料清理、切分、標準化並進行 SMOTE 過採樣後，回傳 (X_train, X_test, y_train, y_test)。
+class DataPreparer:
+    def __init__(self, random_state: int):
+        self.random_state = random_state
+        self.scaler = StandardScaler()
 
-    Args:
-        df (pd.DataFrame): 原始資料，需包含 'label' 欄位。
-        random_state (int): 隨機種子。
-        target_pos_ratio (float): 希望訓練集過採樣後的正類比例，例如 0.50。
-        test_size (float): 測試集比例。
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-            (X_train_resampled, X_test_scaled, y_train_resampled, y_test)
-    """
-    if 'label' not in df.columns:
-        raise ValueError("輸入的 DataFrame 必須包含 'label' 欄位。")
-
-    # 僅保留數值欄位並移除全為 NaN 欄位
-    df_numeric = df.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
-
-    # 拆分特徵與標籤
-    y = df_numeric['label'].copy()
-    X = df_numeric.drop(columns=['label']).copy()
-
-    # 先切分資料（避免資料洩漏）
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=y
-    )
-    
-    print(f"訓練集大小: {X_train.shape}")
-    print(f"測試集大小: {X_test.shape}")
-    print(f"訓練集中警示帳戶比例: {y_train.mean():.2%}")
-    print(f"測試集中警示帳戶比例: {y_test.mean():.2%}")
-
-    return X_train, X_test, y_train, y_test
-
-def prepare_data_cutting(
-    df: pd.DataFrame,
-    neg_ratio: float = 0.10,
-    pos_scale: float = 5.0,
-    random_state: int = 42,
-    test_size: float = 0.30
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    保留全部正類（label=1），依比例抽樣負類（label=0），切分與標準化。
-    若 pos_scale > 1.0，使用 SMOTE 於訓練集將正類數量放大為原本的 pos_scale 倍。
-    """
-    if 'label' not in df.columns:
-        raise ValueError("輸入的 DataFrame 必須包含 'label' 欄位。")
-    if not (0 < neg_ratio <= 1):
-        raise ValueError("neg_ratio 必須介於 (0, 1] 之間。")
-    if pos_scale <= 0:
-        raise ValueError("pos_scale 必須 > 0。")
-
-    df_numeric = df.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
-
-    pos_df = df_numeric[df_numeric['label'] == 1]
-    neg_df = df_numeric[df_numeric['label'] == 0]
-
-    neg_sample = neg_df.sample(frac=neg_ratio, random_state=random_state, replace=False)
-    sampled_df = pd.concat([pos_df, neg_sample], axis=0).sample(frac=1.0, random_state=random_state)
-
-    y = sampled_df['label'].copy()
-    X = sampled_df.drop(columns=['label']).copy()
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y
-    )
-
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    # 當 pos_scale > 1.0 時，於訓練集使用 SMOTE 放大正類數量（僅增正類，負類不變）
-    if pos_scale > 1.0:
-        n_pos = int((y_train == 1).sum())
-        n_neg = int((y_train == 0).sum())
-        if n_pos == 0:
-            raise ValueError("訓練集沒有正類，無法執行 SMOTE。")
-        # 目標正類數量
-        n_pos_target = int(n_pos * pos_scale)
+    def prepare_cutting(self,df: pd.DataFrame,neg_ratio: float,pos_scale: float,test_size: float)-> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         
-        # 只提高正類到 n_pos_target，負類維持 n_neg（不增不減）
-        sampling_strategy = {0: n_neg, 1: n_pos_target}
+        if "label" not in df.columns:
+            raise ValueError("DataFrame must contain label")
 
-        # 若 k_neighbors 大於正類樣本數-1，需調小以避免錯誤
-        k_neighbors = max(1, min(5, n_pos - 1))
+        df = df.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
 
-        smote = SMOTE(sampling_strategy=sampling_strategy,
-                      random_state=random_state,
-                      k_neighbors=k_neighbors)
-        X_train_out, y_train_out = smote.fit_resample(X_train_scaled, y_train)
-    else:
-        X_train_out, y_train_out = X_train_scaled, y_train
+        pos_df = df[df["label"] == 1]
+        neg_df = df[df["label"] == 0].sample(frac=neg_ratio,random_state=self.random_state)
 
-    print(f"訓練集大小: {X_train_out.shape}, 測試集大小: {X_test_scaled.shape}")
-    print(f"訓練集正類比例: {y_train_out.mean():.2%}, 測試集正類比例: {y_test.mean():.2%}")
+        sampled_df = pd.concat([pos_df, neg_df]).sample(frac=1.0,random_state=self.random_state)
 
-    return X_train_out, X_test_scaled, y_train_out, y_test
+        X = sampled_df.drop(columns=["label"])
+        y = sampled_df["label"]
 
-def prepare_data_smote(
-    df: pd.DataFrame,
-    random_state: int = 42,
-    target_pos_ratio: float = 0.50,
-    test_size: float = 0.30
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    將原始資料清理、切分、標準化並進行 SMOTE 過採樣後，回傳 (X_train, X_test, y_train, y_test)。
+        X_train, X_test, y_train, y_test = train_test_split(X,y,test_size=test_size,stratify=y,random_state=self.random_state)
 
-    Args:
-        df (pd.DataFrame): 原始資料，需包含 'label' 欄位。
-        random_state (int): 隨機種子。
-        target_pos_ratio (float): 希望訓練集過採樣後的正類比例，例如 0.50。
-        test_size (float): 測試集比例。
+        X_train = self.scaler.fit_transform(X_train)
+        X_test = self.scaler.transform(X_test)
 
-    Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-            (X_train_resampled, X_test_scaled, y_train_resampled, y_test)
-    """
-    if 'label' not in df.columns:
-        raise ValueError("輸入的 DataFrame 必須包含 'label' 欄位。")
+        if pos_scale > 1:
+            n_pos = (y_train == 1).sum()
+            n_neg = (y_train == 0).sum()
+            smote = SMOTE(
+            sampling_strategy={0: n_neg, 1: int(n_pos * pos_scale)},
+            random_state=self.random_state
+            )
+            X_train, y_train = smote.fit_resample(X_train, y_train)
 
-    # 僅保留數值欄位並移除全為 NaN 欄位
-    df_numeric = df.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
+        print(f"Training data:\tPositive samples: {(y_train == 1).sum()},\tNegative samples: {(y_train == 0).sum()},Ratio: {(y_train == 1).mean():.2f}\n"
+              f"Test data:\tPositive samples: {(y_test == 1).sum()},\tNegative samples: {(y_test == 0).sum()},\tRatio: {(y_test == 1).mean():.2f}")
+        print("finish prepare_data_cutting\n")
+        return X_train, X_test, y_train, y_test
+    
+    def prepare_data_pure(self,df: pd.DataFrame,test_size: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        僅將資料清理、切分並標準化，不進行 SMOTE。
+        返回 (X_train, X_test, y_train, y_test) 為 numpy 陣列。
+        """
+        if "label" not in df.columns:
+            raise ValueError("DataFrame must contain label")
 
-    # 拆分特徵與標籤
-    y = df_numeric['label'].copy()
-    X = df_numeric.drop(columns=['label']).copy()
+        df_numeric = df.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
 
-    # 先切分資料（避免資料洩漏）
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=y
-    )
+        y = df_numeric["label"].copy()
+        X = df_numeric.drop(columns=["label"]).copy()
 
-    # 標準化：用訓練集擬合，再套用到訓練/測試
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+        X_train, X_test, y_train, y_test = train_test_split(X,y,test_size=test_size,stratify=y,random_state=self.random_state)
 
-    # 計算 SMOTE 的 sampling_strategy
-    # sampling_strategy = 目標正類比例 / (1 - 目標正類比例)
-    if not (0 < target_pos_ratio < 1):
-        raise ValueError("target_pos_ratio 必須介於 (0, 1) 之間。")
-    sampling_strategy = target_pos_ratio / (1 - target_pos_ratio)
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
+        
+        print(f"Training data:\tPositive samples: {(y_train == 1).sum()},\tNegative samples: {(y_train == 0).sum()},\tRatio: {(y_train == 1).mean():.2f}\n"
+              f"Test data:\tPositive samples: {(y_test == 1).sum()},\tNegative samples: {(y_test == 0).sum()},\tRatio: {(y_test == 1).mean():.2f}")
+        print("finish prepare_data_cutting\n")
+        return X_train_scaled, X_test_scaled, y_train, y_test
 
-    # 訓練集 SMOTE
-    smote = SMOTE(sampling_strategy=sampling_strategy, random_state=random_state)
-    X_train_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
+    def prepare_data_smote(self,df: pd.DataFrame,target_pos_ratio: float,test_size: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        清理、切分、標準化後，於訓練集使用 SMOTE 使正類比例達到 target_pos_ratio。
+        target_pos_ratio 介於 (0, 1)，例如 0.5 表示希望正類約佔一半。
+        返回 (X_train, X_test, y_train, y_test) 為 numpy 陣列。
+        """
+        if "label" not in df.columns:
+            raise ValueError("DataFrame must contain label")
+        if not (0 < target_pos_ratio < 1):
+            raise ValueError("target_pos_ratio 必須介於 (0, 1) 之間")
 
-    # 訊息輸出
-    print("SMOTE 後訓練集大小:", X_train_resampled.shape, "正類比例:", y_train_resampled.mean())
-    print(f"訓練集大小: {X_train_resampled.shape}")
-    print(f"測試集大小: {X_test_scaled.shape}")
-    print(f"訓練集中警示帳戶比例: {y_train_resampled.mean():.2%}")
-    print(f"測試集中警示帳戶比例: {y_test.mean():.2%}")
+        df_numeric = df.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
 
-    return X_train_resampled, X_test_scaled, y_train_resampled, y_test
+        y = df_numeric["label"].copy()
+        X = df_numeric.drop(columns=["label"]).copy()
 
-def performPCA(data, n_components=2):
-    from sklearn.decomposition import PCA
-    df_numeric = data.select_dtypes(include=[np.number]).dropna(axis=1, how='all')
-    pca_model = PCA(n_components=n_components)
-    reduced_data = pca_model.fit_transform(df_numeric.drop(columns=['label'], errors='ignore'))
-    result_df = pd.DataFrame(reduced_data, columns=[f'PC{i+1}' for i in range(n_components)])
-    if 'label' in df_numeric.columns:
-        result_df = pd.concat([result_df, df_numeric['label'].reset_index(drop=True)], axis=1)
-    return result_df
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=test_size,
+            stratify=y,
+            random_state=self.random_state
+        )
+
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
+
+        # 將目標正類比例轉為 SMOTE 的 minority/majority 比例
+        sampling_ratio = target_pos_ratio / (1 - target_pos_ratio)
+
+        smote = SMOTE(sampling_strategy=sampling_ratio, random_state=self.random_state)
+        X_train_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
+
+        print(f"Training data:\tPositive samples: {(y_train_resampled == 1).sum()},\tNegative samples: {(y_train_resampled == 0).sum()},\tRatio: {(y_train_resampled == 1).mean():.2f}\n"
+              f"Test data:\tPositive samples: {(y_test == 1).sum()},\tNegative samples: {(y_test == 0).sum()},\tRatio: {(y_test == 1).mean():.2f}")
+        print("finish prepare_data_smote\n")
+        return X_train_resampled, X_test_scaled, y_train_resampled, y_test
