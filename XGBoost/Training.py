@@ -28,11 +28,12 @@ class XGBoostTrainer:
     def train_with_search(self, dataset, param_grid):
         X_train, _, y_train, _ = dataset
         
-        #split validation set from training set
+        # 由訓練集再切出驗證集
         X_train, X_val, y_train, y_val = train_test_split(
             X_train, y_train, test_size=0.3, stratify=y_train, random_state=self.random_state
         )
         
+        # 建立 XGBoost 分類器
         base_model = XGBClassifier(
             objective="binary:logistic",
             tree_method="hist",
@@ -42,6 +43,7 @@ class XGBoostTrainer:
             scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum()
         )
 
+        # 使用隨機搜尋進行超參數調整
         search = RandomizedSearchCV(
             base_model,
             param_distributions=param_grid,
@@ -52,10 +54,12 @@ class XGBoostTrainer:
             random_state=self.random_state
         )
 
+        # 進行超參數搜尋；傳入驗證集讓 XGBoost 監控評估指標
         search.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
         print(f"Best params: {search.best_params_}, Best score: {search.best_score_:.4f}")
         print("finish hyperparameter search\n")
-        return search.best_estimator_
+        
+        return search.best_estimator_ # 回傳最佳模型
     
     def train(self, dataset, params: dict):
         X_train, _, y_train, _ = dataset
@@ -148,8 +152,8 @@ if __name__ == "__main__":
     data_dir = "C:/school/SchoolProgram/NTUST_CSIE_DS/DataSet"
     dataset_names = [
     "preprocessingV2_T1_2_3.csv",
-    # "preprocessingV2_T1_2.csv",
-    # "preprocessingV2_T1_basic.csv"
+    "preprocessingV2_T1_2.csv",
+    "preprocessingV2_T1_basic.csv"
     ]
 
     param_grid = {
@@ -175,14 +179,14 @@ if __name__ == "__main__":
         dataset = preparer.prepare_cutting(df,neg_ratio=0.015, pos_scale=5, test_size=0.20)
         # dataset = preparer.prepare_data_smote(df,target_pos_ratio=0.33, test_size=0.20)
         
-        #model = trainer.train_with_search(dataset, param_grid)
-        model = trainer.train(dataset, params={
-            "n_estimators": 650,
-            "max_depth": 7,
-            "learning_rate": 0.25,
-            "subsample": 0.95,
-            "colsample_bytree": 0.85
-        })
+        model = trainer.train_with_search(dataset, param_grid)
+        # model = trainer.train(dataset, params={
+        #     "n_estimators": 650,
+        #     "max_depth": 7,
+        #     "learning_rate": 0.25,
+        #     "subsample": 0.95,
+        #     "colsample_bytree": 0.85
+        # })
         
         if IS_SAVE_RESULT:
             trainer.save_model(model)
@@ -192,7 +196,7 @@ if __name__ == "__main__":
                 model,
                 title="Feature Importance",
                 importance_type="gain",
-                max_num=20
+                max_num=10
             )
             
             # 讀取測試帳戶清單
@@ -215,6 +219,6 @@ if __name__ == "__main__":
             
             # copy_dataSet = (dataset[0], Y_train, dataset[2], Y_test)
             # evaluator.evaluate_model(model, copy_dataSet)
-            predictions_result(df_origin=df,model=model,data_dir=data_dir,threshold=0.2,alert_file="acct_alert.csv")
+            predictions_result(df_origin=df,model=model,data_dir=data_dir,threshold=0.05,alert_file="acct_alert.csv")
         
         print(f"===== finish training {file_name} =====")

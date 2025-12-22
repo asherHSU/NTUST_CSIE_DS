@@ -31,7 +31,7 @@ class ModelEvaluator:
         def report(title, y_true, y_pred, y_proba=None):
             lines = [f"{title}:"]
             if y_proba is not None:
-                y_pred_thr = (y_proba >= 0.5).astype(int)
+                y_pred_thr = (y_proba >= 0.05).astype(int)
                 cm = confusion_matrix(y_true, y_pred_thr)
                 cr = classification_report(y_true, y_pred_thr)
                 lines.append("Confusion Matrix (using probabilities):")
