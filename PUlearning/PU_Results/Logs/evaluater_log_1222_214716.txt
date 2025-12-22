@@ -1,0 +1,39 @@
+訓練資料集:
+Confusion Matrix (using probabilities):
+[[213507  16081]
+ [     0    703]]
+
+Classification Report (using probabilities):
+              precision    recall  f1-score   support
+
+           0       1.00      0.93      0.96    229588
+           1       0.04      1.00      0.08       703
+
+    accuracy                           0.93    230291
+   macro avg       0.52      0.96      0.52    230291
+weighted avg       1.00      0.93      0.96    230291
+
+Accuracy: 0.9302
+ROC AUC Score: 0.9922
+------------------------------------------------------------
+測試資料集:
+Confusion Matrix (using probabilities):
+[[91481  6915]
+ [   18   283]]
+
+Classification Report (using probabilities):
+              precision    recall  f1-score   support
+
+           0       1.00      0.93      0.96     98396
+           1       0.04      0.94      0.08       301
+
+    accuracy                           0.93     98697
+   macro avg       0.52      0.93      0.52     98697
+weighted avg       1.00      0.93      0.96     98697
+
+Accuracy: 0.9298
+ROC AUC Score: 0.9851
+------------------------------------------------------------
+PR 曲線 AP: 0.3952
+最佳閾值: 0.9992 | F1: 0.4418 | P: 0.3700 | R: 0.5482
+
