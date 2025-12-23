@@ -28,11 +28,12 @@ class XGBoostTrainer:
     def train_with_search(self, dataset, param_grid):
         X_train, _, y_train, _ = dataset
         
-        #split validation set from training set
+        # 由訓練集再切出驗證集
         X_train, X_val, y_train, y_val = train_test_split(
             X_train, y_train, test_size=0.3, stratify=y_train, random_state=self.random_state
         )
         
+        # 建立 XGBoost 分類器
         base_model = XGBClassifier(
             objective="binary:logistic",
             tree_method="hist",
@@ -42,6 +43,7 @@ class XGBoostTrainer:
             scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum()
         )
 
+        # 使用隨機搜尋進行超參數調整
         search = RandomizedSearchCV(
             base_model,
             param_distributions=param_grid,
@@ -52,10 +54,12 @@ class XGBoostTrainer:
             random_state=self.random_state
         )
 
+        # 進行超參數搜尋；傳入驗證集讓 XGBoost 監控評估指標
         search.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
         print(f"Best params: {search.best_params_}, Best score: {search.best_score_:.4f}")
         print("finish hyperparameter search\n")
-        return search.best_estimator_
+        
+        return search.best_estimator_ # 回傳最佳模型
     
     def train(self, dataset, params: dict):
         X_train, _, y_train, _ = dataset
@@ -72,7 +76,7 @@ class XGBoostTrainer:
             eval_metric="aucpr",
             device="gpu",
             random_state=self.random_state,
-            scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum()
+            scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum() * 2
         )
 
         model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
@@ -148,8 +152,8 @@ if __name__ == "__main__":
     data_dir = "C:/school/SchoolProgram/NTUST_CSIE_DS/DataSet"
     dataset_names = [
     "preprocessingV2_T1_2_3.csv",
-    # "preprocessingV2_T1_2.csv",
-    # "preprocessingV2_T1_basic.csv"
+    "preprocessingV2_T1_2.csv",
+    "preprocessingV2_T1_basic.csv"
     ]
 
     param_grid = {
@@ -192,9 +196,29 @@ if __name__ == "__main__":
                 model,
                 title="Feature Importance",
                 importance_type="gain",
-                max_num=20
+                max_num=10
             )
             
-            predictions_result(df_origin=df,model=model,data_dir=data_dir,threshold=0.2,alert_file="acct_alert.csv")
+            # 讀取測試帳戶清單
+            # alert_path = Path(data_dir) / "acct_alert.csv"
+            # df_test_acct = pd.read_csv(alert_path)
+
+            # 過濾原始資料，僅保留指定帳戶與數值欄位；移除空欄
+            # df_test = (
+            #     df[df['acct'].isin(df_test_acct['acct'])]
+            #     .copy()
+            #     .select_dtypes(include=[np.number])
+            #     .dropna(axis=1, how='all')
+            # )
+
+            # 建立特徵矩陣（若有 label 欄位則移除）
+            # scaler = StandardScaler()
+            # Y_train = df_test.drop(columns=["label"], errors='ignore')
+            # Y_train = scaler.fit_transform(Y_train)
+            # Y_test = df_test["label"].copy()
+            
+            # copy_dataSet = (dataset[0], Y_train, dataset[2], Y_test)
+            # evaluator.evaluate_model(model, copy_dataSet)
+            predictions_result(df_origin=df,model=model,data_dir=data_dir,threshold=0.05,alert_file="acct_alert.csv")
         
         print(f"===== finish training {file_name} =====")
