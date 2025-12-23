@@ -6,10 +6,18 @@ import matplotlib.pyplot as plt
 
 class ModelEvaluator:
     def __init__(self, result_dir: str = ""):
-        self.result_dir = Path(result_dir).resolve().parent.parent / result_dir
+        # Use the provided directory directly, resolving it to an absolute path
+        self.result_dir = Path(result_dir).resolve()
+        
+        # Ensure the base result directory exists
         self.result_dir.mkdir(parents=True, exist_ok=True)
-        # 單次執行共用一個 log 檔
-        self.log_path = self.result_dir / "Logs" / f"evaluater_log_{datetime.now():%m%d_%H%M%S}.txt"
+        
+        # Ensure the Logs directory exists
+        log_dir = self.result_dir / "Logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create the log file path
+        self.log_path = log_dir / f"evaluater_log_{datetime.now():%m%d_%H%M%S}.txt"
 
     def _log(self, msg: str = "") -> None:
         with self.log_path.open("a", encoding="utf-8") as f:
